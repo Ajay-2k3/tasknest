@@ -1,17 +1,11 @@
-import React, {
-  createContext,
-  useContext,
-  useReducer,
-  useEffect,
-  ReactNode,
-} from 'react';
-import axios from 'axios';
+import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import axios, { AxiosError } from 'axios';
 
-// ✅ Dynamic API base URL using Vite env variables
+// ✅ Use VITE_API_URL for deployment flexibility
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 axios.defaults.baseURL = API_BASE_URL;
 
-// Types
+// ✅ Define user type
 interface User {
   id: string;
   name: string;
@@ -22,6 +16,7 @@ interface User {
   avatar?: string;
 }
 
+// ✅ Auth state shape
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -29,6 +24,7 @@ interface AuthState {
   error: string | null;
 }
 
+// ✅ Action types
 type AuthAction =
   | { type: 'AUTH_START' }
   | { type: 'AUTH_SUCCESS'; payload: User }
@@ -37,6 +33,7 @@ type AuthAction =
   | { type: 'CLEAR_ERROR' }
   | { type: 'UPDATE_USER'; payload: Partial<User> };
 
+// ✅ Context shape
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   register: (userData: any) => Promise<void>;
@@ -45,7 +42,7 @@ interface AuthContextType extends AuthState {
   clearError: () => void;
 }
 
-// Initial state
+// ✅ Initial state
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
@@ -53,7 +50,7 @@ const initialState: AuthState = {
   error: null,
 };
 
-// Reducer
+// ✅ Reducer function
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
     case 'AUTH_START':
@@ -94,27 +91,28 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   }
 };
 
-// Context
+// ✅ Create context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Token management
+// ✅ Token helpers
 const getToken = () => localStorage.getItem('token');
 const setToken = (token: string) => localStorage.setItem('token', token);
 const removeToken = () => localStorage.removeItem('token');
 
-// Axios interceptor for token
+// ✅ Axios interceptor to add token to every request
 axios.interceptors.request.use((config) => {
   const token = getToken();
-  if (token) {
+  if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Provider
+// ✅ AuthProvider Component
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
+  // ✅ Check auth status on app load
   useEffect(() => {
     const checkAuth = async () => {
       const token = getToken();
@@ -126,12 +124,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const response = await axios.get('/auth/verify');
         dispatch({ type: 'AUTH_SUCCESS', payload: response.data.user });
-      } catch (error: any) {
-        removeToken();
-        const message =
-          error?.response?.data?.message ||
-          (error?.response?.status === 401 ? 'Session expired' : 'Invalid token');
-        dispatch({ type: 'AUTH_FAILURE', payload: message });
+      } catch (error) {
+        const err = error as AxiosError;
+        if (err.response?.status === 401) {
+          removeToken();
+          dispatch({ type: 'AUTH_FAILURE', payload: 'Session expired' });
+        } else {
+          dispatch({ type: 'AUTH_FAILURE', payload: 'Auth check failed' });
+        }
       }
     };
 
@@ -143,6 +143,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await axios.post('/auth/login', { email, password });
       const { token, user } = response.data;
+
       setToken(token);
       dispatch({ type: 'AUTH_SUCCESS', payload: user });
     } catch (error: any) {
@@ -157,6 +158,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await axios.post('/auth/register-public', userData);
       const { token, user } = response.data;
+
       setToken(token);
       dispatch({ type: 'AUTH_SUCCESS', payload: user });
     } catch (error: any) {
@@ -191,8 +193,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Hook
+// ✅ Hook for consuming context
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must b
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

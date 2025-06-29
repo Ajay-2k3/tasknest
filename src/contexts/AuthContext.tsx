@@ -1,9 +1,14 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  ReactNode,
+} from 'react';
 import axios from 'axios';
 
-// API configuration
-const API_BASE_URL = 'https://your-backend.onrender.com/api';
-
+// ✅ Dynamic API base URL using Vite env variables
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 axios.defaults.baseURL = API_BASE_URL;
 
 // Types
@@ -110,7 +115,6 @@ axios.interceptors.request.use((config) => {
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Check if user is authenticated on app load
   useEffect(() => {
     const checkAuth = async () => {
       const token = getToken();
@@ -122,9 +126,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const response = await axios.get('/auth/verify');
         dispatch({ type: 'AUTH_SUCCESS', payload: response.data.user });
-      } catch (error) {
+      } catch (error: any) {
         removeToken();
-        dispatch({ type: 'AUTH_FAILURE', payload: 'Invalid token' });
+        const message =
+          error?.response?.data?.message ||
+          (error?.response?.status === 401 ? 'Session expired' : 'Invalid token');
+        dispatch({ type: 'AUTH_FAILURE', payload: message });
       }
     };
 
@@ -136,7 +143,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await axios.post('/auth/login', { email, password });
       const { token, user } = response.data;
-      
       setToken(token);
       dispatch({ type: 'AUTH_SUCCESS', payload: user });
     } catch (error: any) {
@@ -151,7 +157,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await axios.post('/auth/register-public', userData);
       const { token, user } = response.data;
-      
       setToken(token);
       dispatch({ type: 'AUTH_SUCCESS', payload: user });
     } catch (error: any) {
@@ -189,8 +194,5 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 // Hook
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+  if (!context) {
+    throw new Error('useAuth must b

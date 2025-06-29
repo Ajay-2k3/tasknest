@@ -15,7 +15,7 @@ import analyticsRoutes from './routes/analytics.js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = 'https://your-backend.onrender.com';
 
 // Middleware
 app.use(helmet());

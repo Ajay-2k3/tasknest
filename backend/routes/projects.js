@@ -11,11 +11,16 @@ import {
 
 const router = express.Router();
 
+// Add error handling middleware for this router
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
 // Get all projects
-router.get('/', authenticateToken, getProjects);
+router.get('/', authenticateToken, asyncHandler(getProjects));
 
 // Get single project
-router.get('/:id', authenticateToken, getProject);
+router.get('/:id', authenticateToken, asyncHandler(getProject));
 
 // Create new project (Admin only)
 router.post('/', authenticateToken, requireAdmin, [
@@ -32,7 +37,7 @@ router.post('/', authenticateToken, requireAdmin, [
     return res.status(400).json({ message: 'Validation error', errors: errors.array() });
   }
   next();
-}, createProject);
+}, asyncHandler(createProject));
 
 // Update project (Admin only)
 router.put('/:id', authenticateToken, requireAdmin, [
@@ -50,9 +55,9 @@ router.put('/:id', authenticateToken, requireAdmin, [
     return res.status(400).json({ message: 'Validation error', errors: errors.array() });
   }
   next();
-}, updateProject);
+}, asyncHandler(updateProject));
 
 // Delete project (Admin only)
-router.delete('/:id', authenticateToken, requireAdmin, deleteProject);
+router.delete('/:id', authenticateToken, requireAdmin, asyncHandler(deleteProject));
 
 export default router;

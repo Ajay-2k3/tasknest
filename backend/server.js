@@ -64,13 +64,14 @@ app.get('/api/health', (req, res) => {
     message: 'TaskNest API is running!', 
     timestamp: new Date().toISOString(),
     version: '2.0.0',
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error('Global error:', err.stack);
+  console.error('❌ Global error:', err.stack);
   
   // Mongoose validation error
   if (err.name === 'ValidationError') {
@@ -123,7 +124,7 @@ const connectDB = async () => {
   try {
     const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/tasknest';
     
-    console.log('🔗 Connecting to MongoDB:', MONGO_URI);
+    console.log('🔗 Attempting to connect to MongoDB:', MONGO_URI);
 
     await mongoose.connect(MONGO_URI, {
       useNewUrlParser: true,
@@ -132,9 +133,64 @@ const connectDB = async () => {
     
     console.log('🚀 MongoDB connected successfully');
     console.log('📊 Database:', mongoose.connection.db.databaseName);
+    
+    // Create demo users after successful connection
+    await createDemoUsers();
   } catch (error) {
     console.error('❌ MongoDB connection failed:', error.message);
+    console.error('Full error:', error);
     process.exit(1);
+  }
+};
+
+// Create demo users function
+const createDemoUsers = async () => {
+  try {
+    // Import User model
+    const User = mongoose.model('User') || (await import('./models/User.js')).default;
+    
+    // Check if demo users already exist
+    const existingAdmin = await User.findOne({ email: 'admin@tasknest.com' });
+    const existingEmployee = await User.findOne({ email: 'employee@tasknest.com' });
+
+    if (existingAdmin && existingEmployee) {
+      console.log('✅ Demo users already exist');
+      return;
+    }
+
+    // Create admin user
+    if (!existingAdmin) {
+      const adminUser = new User({
+        name: 'Admin User',
+        email: 'admin@tasknest.com',
+        password: 'password123',
+        role: 'admin',
+        department: 'Management',
+        position: 'System Administrator'
+      });
+
+      await adminUser.save();
+      console.log('✅ Admin demo user created');
+    }
+
+    // Create employee user
+    if (!existingEmployee) {
+      const employeeUser = new User({
+        name: 'Employee User',
+        email: 'employee@tasknest.com',
+        password: 'password123',
+        role: 'employee',
+        department: 'Development',
+        position: 'Software Developer'
+      });
+
+      await employeeUser.save();
+      console.log('✅ Employee demo user created');
+    }
+
+    console.log('🎉 Demo users setup complete!');
+  } catch (error) {
+    console.error('❌ Error creating demo users:', error);
   }
 };
 
@@ -166,13 +222,18 @@ process.on('SIGINT', async () => {
 
 // Start server
 const startServer = async () => {
-  await connectDB();
-  app.listen(PORT, () => {
-    console.log(`🌟 TaskNest server running on port ${PORT}`);
-    console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🔗 API URL: http://localhost:${PORT}/api`);
-    console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
-  });
+  try {
+    await connectDB();
+    app.listen(PORT, () => {
+      console.log(`🌟 TaskNest server running on port ${PORT}`);
+      console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🔗 API URL: http://localhost:${PORT}/api`);
+      console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
 };
 
 startServer();

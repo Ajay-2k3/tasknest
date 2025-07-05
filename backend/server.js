@@ -19,6 +19,7 @@ import notificationRoutes from './routes/notifications.js';
 import eventRoutes from './routes/events.js';
 import fileRoutes from './routes/files.js';
 import searchRoutes from './routes/search.js';
+import adminRoutes from './routes/admin.js';
 
 dotenv.config();
 
@@ -49,6 +50,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/tasks', taskRoutes);

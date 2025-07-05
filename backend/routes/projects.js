@@ -6,7 +6,8 @@ import {
   getProjects,
   getProject,
   updateProject,
-  deleteProject
+  deleteProject,
+  getMyTasks
 } from '../controllers/projectController.js';
 
 const router = express.Router();
@@ -16,6 +17,9 @@ router.get('/', authenticateToken, getProjects);
 
 // Get single project
 router.get('/:id', authenticateToken, getProject);
+
+// Get admin's created tasks
+router.get('/admin/my-tasks', authenticateToken, requireAdmin, getMyTasks);
 
 // Create new project (Admin only)
 router.post('/', authenticateToken, requireAdmin, [

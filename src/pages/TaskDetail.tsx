@@ -9,10 +9,14 @@ import {
   Paperclip,
   Edit,
   Save,
-  X
+  X,
+  CheckSquare
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
+import TaskAcceptance from '../components/TaskAcceptance';
+import FileUpload from '../components/FileUpload';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 import axios from 'axios';
 
 interface Task {
@@ -24,17 +28,37 @@ interface Task {
   dueDate: string;
   estimatedHours: number;
   actualHours: number;
+  isAccepted: boolean;
+  acceptedAt?: string;
   project: { _id: string; name: string; status: string };
   assignedTo: { _id: string; name: string; email: string; avatar?: string };
   createdBy: { _id: string; name: string; email: string; avatar?: string };
   comments: Array<{
     _id: string;
-    user: { name: string; avatar?: string };
+    user: { _id: string; name: string; avatar?: string };
     text: string;
+    mentions: Array<{ _id: string; name: string }>;
     createdAt: string;
+  }>;
+  attachments: Array<{
+    _id: string;
+    name: string;
+    originalName: string;
+    url: string;
+    size: number;
+    mimeType: string;
+    uploadedBy: { _id: string; name: string };
+    uploadedAt: string;
   }>;
   tags: string[];
   isOverdue: boolean;
+  checklist: Array<{
+    _id: string;
+    text: string;
+    completed: boolean;
+    completedBy?: { _id: string; name: string };
+    completedAt?: string;
+  }>;
 }
 
 const TaskDetail: React.FC = () => {
@@ -111,6 +135,37 @@ const TaskDetail: React.FC = () => {
     }
   };
 
+  const handleTaskAccepted = (updatedTask: Task) => {
+    setTask(updatedTask);
+  };
+
+  const handleFileUploaded = (attachment: any) => {
+    setTask(prev => prev ? {
+      ...prev,
+      attachments: [...prev.attachments, attachment]
+    } : null);
+  };
+
+  const handleFileDeleted = (attachmentId: string) => {
+    setTask(prev => prev ? {
+      ...prev,
+      attachments: prev.attachments.filter(att => att._id !== attachmentId)
+    } : null);
+  };
+
+  const handleChecklistUpdate = async (checklistItems: any[]) => {
+    if (!task) return;
+
+    try {
+      const response = await axios.patch(`/tasks/${task._id}/checklist`, {
+        checklistItems
+      });
+      setTask(response.data.task);
+    } catch (error: any) {
+      showError('Error', error.response?.data?.message || 'Failed to update checklist');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'bg-green-100 text-green-800';
@@ -135,25 +190,16 @@ const TaskDetail: React.FC = () => {
     task.createdBy._id === user.id
   );
 
+  const canUploadFiles = user && task && (
+    user.role === 'admin' || 
+    task.assignedTo._id === user.id || 
+    task.createdBy._id === user.id
+  );
+
   if (isLoading) {
     return (
-      <div className="animate-pulse">
-        <div className="h-8 bg-gray-200 rounded mb-6 w-1/3"></div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <div className="h-6 bg-gray-200 rounded mb-4"></div>
-              <div className="h-4 bg-gray-200 rounded mb-2"></div>
-              <div className="h-4 bg-gray-200 rounded"></div>
-            </div>
-          </div>
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <div className="h-6 bg-gray-200 rounded mb-4"></div>
-              <div className="h-4 bg-gray-200 rounded"></div>
-            </div>
-          </div>
-        </div>
+      <div className="flex items-center justify-center min-h-64">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
@@ -224,6 +270,15 @@ const TaskDetail: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Task Acceptance */}
+          {user && !task.isAccepted && (
+            <TaskAcceptance
+              task={task}
+              currentUserId={user.id}
+              onTaskAccepted={handleTaskAccepted}
+            />
+          )}
+
           {/* Task Details */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Task Details</h2>
@@ -313,6 +368,67 @@ const TaskDetail: React.FC = () => {
             </div>
           </div>
 
+          {/* Checklist */}
+          {task.checklist.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                Checklist ({task.checklist.filter(item => item.completed).length}/{task.checklist.length})
+              </h2>
+              
+              <div className="space-y-3">
+                {task.checklist.map((item, index) => (
+                  <div key={item._id} className="flex items-center space-x-3">
+                    <button
+                      onClick={() => {
+                        const updatedChecklist = [...task.checklist];
+                        updatedChecklist[index] = {
+                          ...item,
+                          completed: !item.completed,
+                          completedBy: !item.completed ? { _id: user!.id, name: user!.name } : undefined,
+                          completedAt: !item.completed ? new Date().toISOString() : undefined
+                        };
+                        handleChecklistUpdate(updatedChecklist);
+                      }}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        item.completed
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {item.completed && <CheckSquare className="w-3 h-3" />}
+                    </button>
+                    <div className="flex-1">
+                      <p className={`text-sm ${item.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                        {item.text}
+                      </p>
+                      {item.completed && item.completedBy && (
+                        <p className="text-xs text-gray-500">
+                          Completed by {item.completedBy.name} on {new Date(item.completedAt!).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* File Attachments */}
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              <Paperclip className="w-5 h-5 inline mr-2" />
+              Attachments
+            </h2>
+            
+            <FileUpload
+              taskId={task._id}
+              attachments={task.attachments}
+              onFileUploaded={handleFileUploaded}
+              onFileDeleted={handleFileDeleted}
+              canUpload={canUploadFiles || false}
+            />
+          </div>
+
           {/* Comments */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
@@ -331,7 +447,7 @@ const TaskDetail: React.FC = () => {
                   <textarea
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Add a comment..."
+                    placeholder="Add a comment... (Use @username to mention someone)"
                     rows={3}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                   />
@@ -369,6 +485,18 @@ const TaskDetail: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-sm text-gray-700">{comment.text}</p>
+                      {comment.mentions.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {comment.mentions.map((mention) => (
+                            <span
+                              key={mention._id}
+                              className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
+                            >
+                              @{mention.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -415,6 +543,16 @@ const TaskDetail: React.FC = () => {
                   <p className="font-medium">{task.actualHours}h / {task.estimatedHours}h</p>
                 </div>
               </div>
+
+              {task.isAccepted && task.acceptedAt && (
+                <div className="flex items-center text-sm">
+                  <CheckSquare className="w-4 h-4 mr-3 text-green-500" />
+                  <div>
+                    <span className="text-gray-600">Accepted:</span>
+                    <p className="font-medium">{new Date(task.acceptedAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

@@ -17,6 +17,8 @@ import taskRoutes from './routes/tasks.js';
 import analyticsRoutes from './routes/analytics.js';
 import notificationRoutes from './routes/notifications.js';
 import eventRoutes from './routes/events.js';
+import fileRoutes from './routes/files.js';
+import searchRoutes from './routes/search.js';
 
 dotenv.config();
 
@@ -53,13 +55,16 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/search', searchRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
     message: 'TaskNest API is running!', 
     timestamp: new Date().toISOString(),
-    version: '2.0.0'
+    version: '2.0.0',
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
@@ -92,6 +97,15 @@ app.use((err, req, res, next) => {
   if (err.name === 'TokenExpiredError') {
     return res.status(401).json({ message: 'Token expired' });
   }
+
+  // Multer errors
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ message: 'File too large. Maximum size is 10MB.' });
+  }
+
+  if (err.message === 'Only images and documents are allowed') {
+    return res.status(400).json({ message: err.message });
+  }
   
   res.status(500).json({ 
     message: 'Something went wrong!', 
@@ -104,17 +118,40 @@ app.use('*', (req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-// MongoDB connection
+// MongoDB connection with better error handling
 const connectDB = async () => {
   try {
-    const MONGO_URI = process.env.MONGO_URI || 'your-fallback-mongo-uri';
-    await mongoose.connect(MONGO_URI);
+    const MONGO_URI = process.env.MONGO_URI;
+    
+    if (!MONGO_URI) {
+      throw new Error('MONGO_URI environment variable is not defined');
+    }
+
+    await mongoose.connect(MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    
     console.log('🚀 MongoDB connected successfully');
+    console.log('📊 Database:', mongoose.connection.db.databaseName);
   } catch (error) {
     console.error('❌ MongoDB connection failed:', error.message);
     process.exit(1);
   }
 };
+
+// MongoDB connection events
+mongoose.connection.on('connected', () => {
+  console.log('📡 Mongoose connected to MongoDB');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ Mongoose connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('📡 Mongoose disconnected');
+});
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
@@ -135,6 +172,8 @@ const startServer = async () => {
   app.listen(PORT, () => {
     console.log(`🌟 TaskNest server running on port ${PORT}`);
     console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔗 API URL: http://localhost:${PORT}/api`);
+    console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
   });
 };
 

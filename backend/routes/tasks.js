@@ -7,7 +7,9 @@ import {
   getTask,
   updateTask,
   addComment,
-  deleteTask
+  deleteTask,
+  acceptTask,
+  updateChecklist
 } from '../controllers/taskController.js';
 
 const router = express.Router();
@@ -35,6 +37,9 @@ router.post('/', authenticateToken, requireAdmin, [
   next();
 }, createTask);
 
+// Accept task
+router.patch('/:id/accept', authenticateToken, requireEmployee, acceptTask);
+
 // Update task
 router.put('/:id', authenticateToken, requireEmployee, [
   body('title').optional().trim().isLength({ min: 3 }),
@@ -50,6 +55,17 @@ router.put('/:id', authenticateToken, requireEmployee, [
   }
   next();
 }, updateTask);
+
+// Update task checklist
+router.patch('/:id/checklist', authenticateToken, requireEmployee, [
+  body('checklistItems').isArray().withMessage('Checklist items must be an array')
+], (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+  }
+  next();
+}, updateChecklist);
 
 // Add comment to task
 router.post('/:id/comments', authenticateToken, requireEmployee, [

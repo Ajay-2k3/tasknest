@@ -8,7 +8,9 @@ import {
   Users, 
   User,
   LogOut,
-  X
+  X,
+  Calendar,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import clsx from 'clsx';
@@ -26,12 +28,14 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Projects', href: '/projects', icon: FolderKanban },
     { name: 'Tasks', href: '/tasks', icon: CheckSquare },
+    { name: 'Calendar', href: '/calendar', icon: Calendar },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-    ...(user?.role === 'admin' ? [{ name: 'Users', href: '/users', icon: Users }] : []),
+    { name: 'Notifications', href: '/notifications', icon: Bell },
+    ...(user?.role === 'admin' ? [{ name: 'Team', href: '/admin/users', icon: Users }] : []),
   ];
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     setOpen(false);
   };
 
@@ -106,7 +110,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
                   {user?.name}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
-                  {user?.role === 'admin' ? 'Administrator' : 'Employee'}
+                  {user?.role === 'admin' ? 'Administrator' : 'Team Member'}
                 </p>
               </div>
             </div>

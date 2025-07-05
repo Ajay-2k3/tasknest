@@ -1,11 +1,13 @@
 import Task from '../models/Task.js';
 import Project from '../models/Project.js';
 import User from '../models/User.js';
+import { createAuditLog } from '../middleware/auditLog.js';
+import { notifyTaskAssigned, createNotification } from '../utils/notificationService.js';
 
 // Create new task
 export const createTask = async (req, res) => {
   try {
-    const { title, description, project, assignedTo, dueDate, priority, estimatedHours, tags } = req.body;
+    const { title, description, project, assignedTo, dueDate, priority, estimatedHours, tags, checklist } = req.body;
 
     // Validate project exists
     const projectDoc = await Project.findById(project);
@@ -33,7 +35,15 @@ export const createTask = async (req, res) => {
       dueDate,
       priority: priority || 'medium',
       estimatedHours: estimatedHours || 0,
-      tags: tags || []
+      tags: tags || [],
+      checklist: checklist || []
+    });
+
+    // Add activity log entry
+    task.activityLog.push({
+      action: 'created',
+      user: req.user._id,
+      details: { priority, estimatedHours }
     });
 
     await task.save();
@@ -50,6 +60,12 @@ export const createTask = async (req, res) => {
     await task.populate('assignedTo', 'name email avatar');
     await task.populate('createdBy', 'name email avatar');
 
+    // Send notification
+    await notifyTaskAssigned(task._id, assignedTo, title, req.user.name);
+
+    // Create audit log
+    await createAuditLog(req, 'TASK_CREATE', 'Task', task._id);
+
     res.status(201).json({
       message: 'Task created successfully',
       task
@@ -60,10 +76,98 @@ export const createTask = async (req, res) => {
   }
 };
 
+// Accept task
+export const acceptTask = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Check if user is assigned to this task
+    if (!task.assignedTo.equals(req.user._id)) {
+      return res.status(403).json({ message: 'You can only accept tasks assigned to you' });
+    }
+
+    if (task.isAccepted) {
+      return res.status(400).json({ message: 'Task is already accepted' });
+    }
+
+    task.isAccepted = true;
+    task.acceptedAt = new Date();
+    
+    // Add activity log entry
+    task.activityLog.push({
+      action: 'accepted',
+      user: req.user._id,
+      details: {}
+    });
+
+    await task.save();
+
+    // Notify task creator
+    await createNotification(
+      task.createdBy,
+      'TASK_ACCEPTED',
+      'Task Accepted',
+      `${req.user.name} accepted the task: ${task.title}`,
+      { taskId: task._id, type: 'task' }
+    );
+
+    // Create audit log
+    await createAuditLog(req, 'TASK_ACCEPT', 'Task', task._id);
+
+    res.json({
+      message: 'Task accepted successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Accept task error:', error);
+    res.status(500).json({ message: 'Failed to accept task', error: error.message });
+  }
+};
+
+// Update task checklist
+export const updateChecklist = async (req, res) => {
+  try {
+    const { checklistItems } = req.body;
+    const task = await Task.findById(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Check permissions
+    const canEdit = req.user.role === 'admin' || 
+                   task.assignedTo.equals(req.user._id) || 
+                   task.createdBy.equals(req.user._id);
+    
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Not authorized to update this task' });
+    }
+
+    task.checklist = checklistItems.map(item => ({
+      ...item,
+      completedBy: item.completed ? req.user._id : undefined,
+      completedAt: item.completed ? new Date() : undefined
+    }));
+
+    await task.save();
+
+    res.json({
+      message: 'Checklist updated successfully',
+      task
+    });
+  } catch (error) {
+    console.error('Update checklist error:', error);
+    res.status(500).json({ message: 'Failed to update checklist', error: error.message });
+  }
+};
+
 // Get all tasks
 export const getTasks = async (req, res) => {
   try {
-    const { status, priority, project, assignedTo, search, page = 1, limit = 20 } = req.query;
+    const { status, priority, project, assignedTo, search, page = 1, limit = 20, accepted } = req.query;
     const query = {};
 
     // Build query filters
@@ -71,6 +175,7 @@ export const getTasks = async (req, res) => {
     if (priority) query.priority = priority;
     if (project) query.project = project;
     if (assignedTo) query.assignedTo = assignedTo;
+    if (accepted !== undefined) query.isAccepted = accepted === 'true';
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },
@@ -112,7 +217,9 @@ export const getTask = async (req, res) => {
       .populate('project', 'name status priority manager team')
       .populate('assignedTo', 'name email avatar department position')
       .populate('createdBy', 'name email avatar')
-      .populate('comments.user', 'name email avatar');
+      .populate('comments.user', 'name email avatar')
+      .populate('activityLog.user', 'name email avatar')
+      .populate('checklist.completedBy', 'name email avatar');
 
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
@@ -152,6 +259,7 @@ export const updateTask = async (req, res) => {
     }
 
     const updates = req.body;
+    const oldStatus = task.status;
 
     // Employees can only update certain fields
     if (req.user.role === 'employee' && !task.assignedTo.equals(req.user._id)) {
@@ -165,11 +273,24 @@ export const updateTask = async (req, res) => {
     }
 
     Object.assign(task, updates);
+
+    // Add activity log entry for status changes
+    if (oldStatus !== task.status) {
+      task.activityLog.push({
+        action: 'status_changed',
+        user: req.user._id,
+        details: { from: oldStatus, to: task.status }
+      });
+    }
+
     await task.save();
 
     await task.populate('project', 'name status priority');
     await task.populate('assignedTo', 'name email avatar');
     await task.populate('createdBy', 'name email avatar');
+
+    // Create audit log
+    await createAuditLog(req, 'TASK_UPDATE', 'Task', task._id, updates);
 
     res.json({
       message: 'Task updated successfully',
@@ -181,7 +302,7 @@ export const updateTask = async (req, res) => {
   }
 };
 
-// Add comment to task
+// Add comment to task with mentions
 export const addComment = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
@@ -189,16 +310,51 @@ export const addComment = async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
+    const { text } = req.body;
+    
+    // Extract mentions from comment text (@username)
+    const mentionRegex = /@(\w+)/g;
+    const mentions = [];
+    let match;
+    
+    while ((match = mentionRegex.exec(text)) !== null) {
+      const username = match[1];
+      const user = await User.findOne({ name: { $regex: username, $options: 'i' } });
+      if (user) {
+        mentions.push(user._id);
+      }
+    }
+
     const comment = {
       user: req.user._id,
-      text: req.body.text,
+      text,
+      mentions,
       createdAt: new Date()
     };
 
     task.comments.push(comment);
+    
+    // Add activity log entry
+    task.activityLog.push({
+      action: 'commented',
+      user: req.user._id,
+      details: { commentLength: text.length, mentions: mentions.length }
+    });
+
     await task.save();
 
     await task.populate('comments.user', 'name email avatar');
+
+    // Send notifications to mentioned users
+    for (const mentionedUserId of mentions) {
+      await createNotification(
+        mentionedUserId,
+        'COMMENT_MENTION',
+        'You were mentioned',
+        `${req.user.name} mentioned you in a comment on "${task.title}"`,
+        { taskId: task._id, type: 'task' }
+      );
+    }
 
     res.status(201).json({
       message: 'Comment added successfully',
@@ -231,6 +387,9 @@ export const deleteTask = async (req, res) => {
     );
 
     await Task.findByIdAndDelete(req.params.id);
+
+    // Create audit log
+    await createAuditLog(req, 'TASK_DELETE', 'Task', req.params.id);
 
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {

@@ -1,40 +1,63 @@
-import React, { useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
-import { CheckSquare, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { CheckSquare, User, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
-const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
+const AcceptInvite: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const token = searchParams.get('token');
+
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { login, isAuthenticated } = useAuth();
+  const { acceptInvite } = useAuth();
   const { showError, showSuccess } = useNotification();
-  const location = useLocation();
 
-  // Redirect to intended page after login
-  const from = location.state?.from?.pathname || '/dashboard';
-
-  if (isAuthenticated) {
-    return <Navigate to={from} replace />;
-  }
+  useEffect(() => {
+    if (!token) {
+      showError('Invalid Link', 'Invitation token is missing');
+      navigate('/login');
+    }
+  }, [token, navigate, showError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (password !== confirmPassword) {
+      showError('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      showError('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    if (!token) return;
+
     setIsLoading(true);
 
     try {
-      await login(email, password);
-      showSuccess('Welcome!', 'Successfully logged in to TaskNest');
+      await acceptInvite(token, { name, password });
+      showSuccess('Welcome!', 'Account created successfully');
+      navigate('/dashboard');
     } catch (error: any) {
-      showError('Login Failed', error.message);
+      showError('Error', error.message);
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (!token) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -46,33 +69,32 @@ const Login: React.FC = () => {
             </div>
           </div>
           <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
-            Welcome to TaskNest
+            Accept Invitation
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to your account to continue
+            Complete your account setup to join the team
           </p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email address
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                Full Name
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
+                  <User className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
+                  id="name"
+                  name="name"
+                  type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  placeholder="Enter your email"
+                  placeholder="Enter your full name"
                 />
               </div>
             </div>
@@ -89,12 +111,11 @@ const Login: React.FC = () => {
                   id="password"
                   name="password"
                   type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  placeholder="Enter your password"
+                  placeholder="Create a password"
                 />
                 <button
                   type="button"
@@ -110,14 +131,35 @@ const Login: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="text-sm">
-                <Link 
-                  to="/forgot-password" 
-                  className="font-medium text-blue-600 hover:text-blue-500 transition-colors"
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Confirm your password"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 >
-                  Forgot your password?
-                </Link>
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -127,23 +169,24 @@ const Login: React.FC = () => {
                 disabled={isLoading}
                 className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
-                {isLoading ? <LoadingSpinner size="sm" /> : 'Sign in'}
+                {isLoading ? <LoadingSpinner size="sm" /> : 'Create Account'}
               </button>
             </div>
-          </form>
 
-          {/* Demo credentials info */}
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <h3 className="text-sm font-medium text-blue-900 mb-2">Demo Accounts</h3>
-            <div className="text-xs text-blue-700 space-y-1">
-              <p><strong>Admin:</strong> admin@tasknest.com / password123</p>
-              <p><strong>Employee:</strong> employee@tasknest.com / password123</p>
+            <div className="text-center">
+              <Link 
+                to="/login" 
+                className="font-medium text-blue-600 hover:text-blue-500 transition-colors inline-flex items-center"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Login
+              </Link>
             </div>
-          </div>
+          </form>
         </div>
       </div>
     </div>
   );
 };
 
-export default Login;
+export default AcceptInvite;

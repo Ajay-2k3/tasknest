@@ -66,6 +66,10 @@ const taskSchema = new mongoose.Schema({
       required: true,
       maxlength: [500, 'Comment cannot exceed 500 characters']
     },
+    mentions: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
     createdAt: {
       type: Date,
       default: Date.now
@@ -73,8 +77,10 @@ const taskSchema = new mongoose.Schema({
   }],
   attachments: [{
     name: String,
+    originalName: String,
     url: String,
     size: Number,
+    mimeType: String,
     uploadedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
@@ -87,6 +93,58 @@ const taskSchema = new mongoose.Schema({
   completedAt: {
     type: Date,
     default: null
+  },
+  acceptedAt: {
+    type: Date,
+    default: null
+  },
+  isAccepted: {
+    type: Boolean,
+    default: false
+  },
+  activityLog: [{
+    action: {
+      type: String,
+      enum: ['created', 'assigned', 'accepted', 'status_changed', 'updated', 'commented'],
+      required: true
+    },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    details: mongoose.Schema.Types.Mixed,
+    timestamp: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  checklist: [{
+    text: {
+      type: String,
+      required: true
+    },
+    completed: {
+      type: Boolean,
+      default: false
+    },
+    completedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    completedAt: Date
+  }],
+  isRecurring: {
+    type: Boolean,
+    default: false
+  },
+  recurringPattern: {
+    type: {
+      type: String,
+      enum: ['daily', 'weekly', 'monthly'],
+    },
+    interval: Number, // every N days/weeks/months
+    endDate: Date
   }
 }, {
   timestamps: true
@@ -107,6 +165,13 @@ taskSchema.pre('save', function(next) {
 // Check if task is overdue
 taskSchema.virtual('isOverdue').get(function() {
   return this.status !== 'completed' && new Date() > this.dueDate;
+});
+
+// Calculate checklist progress
+taskSchema.virtual('checklistProgress').get(function() {
+  if (this.checklist.length === 0) return 0;
+  const completed = this.checklist.filter(item => item.completed).length;
+  return Math.round((completed / this.checklist.length) * 100);
 });
 
 // Ensure virtual fields are serialized

@@ -14,6 +14,7 @@ interface User {
   department?: string;
   position?: string;
   avatar?: string;
+  lastLogin?: string;
 }
 
 // ✅ Auth state shape
@@ -40,6 +41,10 @@ interface AuthContextType extends AuthState {
   logout: () => void;
   updateUser: (userData: Partial<User>) => void;
   clearError: () => void;
+  refreshToken: () => Promise<boolean>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, password: string) => Promise<void>;
+  acceptInvite: (token: string, userData: any) => Promise<void>;
 }
 
 // ✅ Initial state
@@ -95,18 +100,90 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // ✅ Token helpers
-const getToken = () => localStorage.getItem('token');
-const setToken = (token: string) => localStorage.setItem('token', token);
-const removeToken = () => localStorage.removeItem('token');
+const getAccessToken = () => localStorage.getItem('accessToken');
+const getRefreshToken = () => localStorage.getItem('refreshToken');
+const setTokens = (accessToken: string, refreshToken: string) => {
+  localStorage.setItem('accessToken', accessToken);
+  localStorage.setItem('refreshToken', refreshToken);
+};
+const removeTokens = () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+};
 
-// ✅ Axios interceptor to add token to every request
+// ✅ Axios interceptors
+let isRefreshing = false;
+let failedQueue: any[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  
+  failedQueue = [];
+};
+
+// Request interceptor
 axios.interceptors.request.use((config) => {
-  const token = getToken();
+  const token = getAccessToken();
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+// Response interceptor for token refresh
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then(token => {
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return axios(originalRequest);
+        }).catch(err => {
+          return Promise.reject(err);
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const refreshToken = getRefreshToken();
+        if (!refreshToken) {
+          throw new Error('No refresh token');
+        }
+
+        const response = await axios.post('/auth/refresh', { refreshToken });
+        const { accessToken } = response.data;
+        
+        localStorage.setItem('accessToken', accessToken);
+        processQueue(null, accessToken);
+        
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        return axios(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        removeTokens();
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // ✅ AuthProvider Component
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -115,7 +192,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // ✅ Check auth status on app load
   useEffect(() => {
     const checkAuth = async () => {
-      const token = getToken();
+      const token = getAccessToken();
       if (!token) {
         dispatch({ type: 'AUTH_FAILURE', payload: 'No token found' });
         return;
@@ -127,7 +204,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch (error) {
         const err = error as AxiosError;
         if (err.response?.status === 401) {
-          removeToken();
+          removeTokens();
           dispatch({ type: 'AUTH_FAILURE', payload: 'Session expired' });
         } else {
           dispatch({ type: 'AUTH_FAILURE', payload: 'Auth check failed' });
@@ -142,9 +219,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     dispatch({ type: 'AUTH_START' });
     try {
       const response = await axios.post('/auth/login', { email, password });
-      const { token, user } = response.data;
+      const { accessToken, refreshToken, user } = response.data;
 
-      setToken(token);
+      setTokens(accessToken, refreshToken);
       dispatch({ type: 'AUTH_SUCCESS', payload: user });
     } catch (error: any) {
       const message = error.response?.data?.message || 'Login failed';
@@ -157,9 +234,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     dispatch({ type: 'AUTH_START' });
     try {
       const response = await axios.post('/auth/register-public', userData);
-      const { token, user } = response.data;
+      const { accessToken, refreshToken, user } = response.data;
 
-      setToken(token);
+      setTokens(accessToken, refreshToken);
       dispatch({ type: 'AUTH_SUCCESS', payload: user });
     } catch (error: any) {
       const message = error.response?.data?.message || 'Registration failed';
@@ -168,9 +245,69 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const logout = () => {
-    removeToken();
-    dispatch({ type: 'LOGOUT' });
+  const logout = async () => {
+    try {
+      const refreshToken = getRefreshToken();
+      if (refreshToken) {
+        await axios.post('/auth/logout', { refreshToken });
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      removeTokens();
+      dispatch({ type: 'LOGOUT' });
+    }
+  };
+
+  const refreshToken = async (): Promise<boolean> => {
+    try {
+      const refreshTokenValue = getRefreshToken();
+      if (!refreshTokenValue) return false;
+
+      const response = await axios.post('/auth/refresh', { refreshToken: refreshTokenValue });
+      const { accessToken, user } = response.data;
+      
+      localStorage.setItem('accessToken', accessToken);
+      dispatch({ type: 'AUTH_SUCCESS', payload: user });
+      return true;
+    } catch (error) {
+      removeTokens();
+      dispatch({ type: 'LOGOUT' });
+      return false;
+    }
+  };
+
+  const forgotPassword = async (email: string) => {
+    try {
+      await axios.post('/auth/forgot-password', { email });
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Failed to send reset email';
+      throw new Error(message);
+    }
+  };
+
+  const resetPassword = async (token: string, password: string) => {
+    try {
+      await axios.post('/auth/reset-password', { token, password });
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Failed to reset password';
+      throw new Error(message);
+    }
+  };
+
+  const acceptInvite = async (token: string, userData: any) => {
+    dispatch({ type: 'AUTH_START' });
+    try {
+      const response = await axios.post('/auth/accept-invite', { token, ...userData });
+      const { accessToken, refreshToken, user } = response.data;
+
+      setTokens(accessToken, refreshToken);
+      dispatch({ type: 'AUTH_SUCCESS', payload: user });
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Failed to accept invitation';
+      dispatch({ type: 'AUTH_FAILURE', payload: message });
+      throw new Error(message);
+    }
   };
 
   const updateUser = (userData: Partial<User>) => {
@@ -188,6 +325,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     logout,
     updateUser,
     clearError,
+    refreshToken,
+    forgotPassword,
+    resetPassword,
+    acceptInvite,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

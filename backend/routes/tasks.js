@@ -9,7 +9,8 @@ import {
   addComment,
   deleteTask,
   acceptTask,
-  updateChecklist
+  updateChecklist,
+  updateTaskStatus
 } from '../controllers/taskController.js';
 
 const router = express.Router();
@@ -39,6 +40,19 @@ router.post('/', authenticateToken, requireAdmin, [
 
 // Accept task
 router.patch('/:id/accept', authenticateToken, requireEmployee, acceptTask);
+
+// Update task status (ONLY for assigned team members)
+router.patch('/:id/status', authenticateToken, requireEmployee, [
+  body('status')
+    .isIn(['todo', 'in-progress', 'review', 'completed'])
+    .withMessage('Status must be one of: todo, in-progress, review, completed')
+], (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+  }
+  next();
+}, updateTaskStatus);
 
 // Update task
 router.put('/:id', authenticateToken, requireEmployee, [

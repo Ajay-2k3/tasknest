@@ -36,7 +36,8 @@ const StatusUpdateDropdown: React.FC<StatusUpdateDropdownProps> = ({
 
     setIsUpdating(true);
     try {
-      await axios.put(`/tasks/${taskId}`, {
+      // Use the new dedicated status update endpoint
+      await axios.patch(`/tasks/${taskId}/status`, {
         status: newStatus
       });
 

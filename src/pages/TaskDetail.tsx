@@ -210,6 +210,9 @@ const TaskDetail: React.FC = () => {
     task.createdBy._id === user.id
   );
 
+  // CRITICAL: Only assigned team member can update status
+  const canUpdateStatus = user && task && task.assignedTo._id === user.id;
+
   const isAssignedToCurrentUser = user && task && task.assignedTo._id === user.id;
 
   if (isLoading) {
@@ -490,12 +493,12 @@ const TaskDetail: React.FC = () => {
             canTrack={isAssignedToCurrentUser || false}
           />
 
-          {/* Status Update */}
+          {/* Status Update - ONLY for assigned team members */}
           <StatusUpdateDropdown
             taskId={task._id}
             currentStatus={task.status}
             onStatusUpdate={handleStatusUpdate}
-            canUpdate={isAssignedToCurrentUser || false}
+            canUpdate={canUpdateStatus || false}
           />
 
           {/* Task Info */}
@@ -516,6 +519,9 @@ const TaskDetail: React.FC = () => {
                 <div>
                   <span className="text-gray-600">Assigned to:</span>
                   <p className="font-medium">{task.assignedTo.name}</p>
+                  {canUpdateStatus && (
+                    <p className="text-xs text-green-600 mt-1">✓ You can update status</p>
+                  )}
                 </div>
               </div>
 

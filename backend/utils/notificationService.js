@@ -56,3 +56,33 @@ export const notifyCommentMention = async (taskId, mentionedUserId, commenterNam
     { taskId, type: 'task' }
   );
 };
+
+export const notifyEventInvitation = async (eventId, attendeeId, eventTitle, eventDate, inviterName) => {
+  return createNotification(
+    attendeeId,
+    'EVENT_INVITATION',
+    'Event Invitation',
+    `${inviterName} invited you to "${eventTitle}" on ${new Date(eventDate).toLocaleDateString()}`,
+    { eventId, type: 'event', eventDate }
+  );
+};
+
+export const notifyEventUpdate = async (eventId, attendeeId, eventTitle, eventDate) => {
+  return createNotification(
+    attendeeId,
+    'EVENT_UPDATED',
+    'Event Updated',
+    `"${eventTitle}" scheduled for ${new Date(eventDate).toLocaleDateString()} has been updated`,
+    { eventId, type: 'event', eventDate }
+  );
+};
+
+export const notifyEventCancellation = async (eventId, attendeeId, eventTitle, eventDate) => {
+  return createNotification(
+    attendeeId,
+    'EVENT_CANCELLED',
+    'Event Cancelled',
+    `"${eventTitle}" scheduled for ${new Date(eventDate).toLocaleDateString()} has been cancelled`,
+    { eventId, type: 'event' }
+  );
+};

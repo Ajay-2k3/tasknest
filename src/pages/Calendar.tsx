@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import Modal from '../components/ui/Modal';
+import EventDetailModal from '../components/EventDetailModal';
 import { useForm } from 'react-hook-form';
 import axios from 'axios';
 
@@ -44,7 +45,9 @@ const Calendar: React.FC = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEventDetailOpen, setIsEventDetailOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [users, setUsers] = useState<Array<{ _id: string; name: string; email: string }>>([]);
 
@@ -94,13 +97,38 @@ const Calendar: React.FC = () => {
 
   const onSubmit = async (data: EventFormData) => {
     try {
-      await axios.post('/events', data);
+      const response = await axios.post('/events', data);
       showSuccess('Success', 'Event created successfully');
+      setEvents(prev => [...prev, response.data.event]);
       setIsModalOpen(false);
       reset();
-      fetchEvents();
     } catch (error: any) {
       showError('Error', error.response?.data?.message || 'Failed to create event');
+    }
+  };
+
+  const handleEditEvent = (event: Event) => {
+    // Set form values for editing
+    setValue('title', event.title);
+    setValue('description', event.description || '');
+    setValue('startDate', new Date(event.startDate).toISOString().slice(0, 16));
+    setValue('endDate', new Date(event.endDate).toISOString().slice(0, 16));
+    setValue('allDay', event.allDay);
+    setValue('type', event.type);
+    setValue('color', event.color);
+    setValue('attendees', event.attendees.map(a => a._id));
+    
+    setIsEventDetailOpen(false);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    try {
+      await axios.delete(`/events/${eventId}`);
+      setEvents(prev => prev.filter(e => e._id !== eventId));
+      showSuccess('Success', 'Event deleted successfully');
+    } catch (error: any) {
+      showError('Error', error.response?.data?.message || 'Failed to delete event');
     }
   };
 
@@ -109,6 +137,16 @@ const Calendar: React.FC = () => {
     setValue('startDate', date.toISOString().slice(0, 16));
     setValue('endDate', new Date(date.getTime() + 60 * 60 * 1000).toISOString().slice(0, 16));
     setIsModalOpen(true);
+  };
+
+  const handleEventClick = async (event: Event) => {
+    try {
+      const response = await axios.get(`/events/${event._id}`);
+      setSelectedEvent(response.data.event);
+      setIsEventDetailOpen(true);
+    } catch (error: any) {
+      showError('Error', error.response?.data?.message || 'Failed to load event details');
+    }
   };
 
   const getDaysInMonth = () => {
@@ -275,7 +313,11 @@ const Calendar: React.FC = () => {
                     {dayEvents.slice(0, 2).map(event => (
                       <div
                         key={event._id}
-                        className={`text-xs px-2 py-1 rounded text-white truncate ${
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEventClick(event);
+                        }}
+                        className={`text-xs px-2 py-1 rounded text-white truncate cursor-pointer hover:opacity-80 transition-opacity ${
                           typeColors[event.type]
                         }`}
                         style={{ backgroundColor: event.color }}
@@ -457,6 +499,20 @@ const Calendar: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Event Detail Modal */}
+      <EventDetailModal
+        isOpen={isEventDetailOpen}
+        onClose={() => {
+          setIsEventDetailOpen(false);
+          setSelectedEvent(null);
+        }}
+        event={selectedEvent}
+        currentUserId={user?.id || ''}
+        currentUserRole={user?.role || ''}
+        onEdit={handleEditEvent}
+        onDelete={handleDeleteEvent}
+      />
     </div>
   );
 };

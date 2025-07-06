@@ -15,7 +15,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import TaskAcceptance from '../components/TaskAcceptance';
-import FileUpload from '../components/FileUpload';
+import AttachmentUpload from '../components/AttachmentUpload';
 import TimeTracker from '../components/TimeTracker';
 import StatusUpdateDropdown from '../components/StatusUpdateDropdown';
 import EnhancedChecklist from '../components/EnhancedChecklist';
@@ -61,6 +61,9 @@ interface Task {
     completed: boolean;
     completedBy?: { _id: string; name: string };
     completedAt?: string;
+    createdBy: { _id: string; name: string };
+    createdAt: string;
+    order: number;
   }>;
 }
 
@@ -142,14 +145,14 @@ const TaskDetail: React.FC = () => {
     setTask(updatedTask);
   };
 
-  const handleFileUploaded = (attachment: any) => {
+  const handleAttachmentUploaded = (attachment: any) => {
     setTask(prev => prev ? {
       ...prev,
       attachments: [...prev.attachments, attachment]
     } : null);
   };
 
-  const handleFileDeleted = (attachmentId: string) => {
+  const handleAttachmentDeleted = (attachmentId: string) => {
     setTask(prev => prev ? {
       ...prev,
       attachments: prev.attachments.filter(att => att._id !== attachmentId)
@@ -392,20 +395,13 @@ const TaskDetail: React.FC = () => {
           />
 
           {/* File Attachments */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              <Paperclip className="w-5 h-5 inline mr-2" />
-              Attachments
-            </h2>
-            
-            <FileUpload
-              taskId={task._id}
-              attachments={task.attachments}
-              onFileUploaded={handleFileUploaded}
-              onFileDeleted={handleFileDeleted}
-              canUpload={canUploadFiles || false}
-            />
-          </div>
+          <AttachmentUpload
+            taskId={task._id}
+            attachments={task.attachments}
+            onAttachmentUploaded={handleAttachmentUploaded}
+            onAttachmentDeleted={handleAttachmentDeleted}
+            canUpload={canUploadFiles || false}
+          />
 
           {/* Comments */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">

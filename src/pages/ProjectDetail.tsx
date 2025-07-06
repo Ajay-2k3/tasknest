@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
+import AddTaskModal from '../components/AddTaskModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import axios from 'axios';
 
@@ -36,16 +37,38 @@ interface Project {
   }>;
 }
 
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+}
+
+interface TaskFormData {
+  title: string;
+  description: string;
+  assignedTo: string;
+  dueDate: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  estimatedHours: number;
+  tags: string;
+}
+
 const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { showError } = useNotification();
+  const { showError, showSuccess } = useNotification();
   const [project, setProject] = useState<Project | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchProject();
+      if (user?.role === 'admin') {
+        fetchUsers();
+      }
     }
   }, [id]);
 
@@ -76,6 +99,50 @@ const ProjectDetail: React.FC = () => {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const response = await axios.get('/users');
+      setUsers(response.data.users.filter((u: User) => u._id !== user?.id));
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+
+  const handleAddTask = async (taskData: TaskFormData) => {
+    if (!project) return;
+
+    setIsSubmittingTask(true);
+    try {
+      const payload = {
+        ...taskData,
+        project: project._id,
+        tags: taskData.tags ? taskData.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []
+      };
+
+      const response = await axios.post('/tasks', payload);
+      
+      // Add the new task to the project's task list
+      setProject(prev => prev ? {
+        ...prev,
+        tasks: [...prev.tasks, {
+          _id: response.data.task._id,
+          title: response.data.task.title,
+          status: response.data.task.status,
+          priority: response.data.task.priority,
+          dueDate: response.data.task.dueDate,
+          assignedTo: response.data.task.assignedTo
+        }]
+      } : null);
+
+      showSuccess('Success', 'Task created successfully');
+    } catch (error: any) {
+      showError('Error', error.response?.data?.message || 'Failed to create task');
+      throw error; // Re-throw to prevent modal from closing
+    } finally {
+      setIsSubmittingTask(false);
     }
   };
 
@@ -239,7 +306,10 @@ const ProjectDetail: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">Tasks</h2>
               {user?.role === 'admin' && (
-                <button className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                <button 
+                  onClick={() => setIsAddTaskModalOpen(true)}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Task
                 </button>
@@ -251,7 +321,16 @@ const ProjectDetail: React.FC = () => {
                 <div className="text-center py-8">
                   <CheckSquare className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks yet</h3>
-                  <p className="text-gray-500">Tasks will appear here once they are created.</p>
+                  <p className="text-gray-500 mb-4">Tasks will appear here once they are created.</p>
+                  {user?.role === 'admin' && (
+                    <button 
+                      onClick={() => setIsAddTaskModalOpen(true)}
+                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create First Task
+                    </button>
+                  )}
                 </div>
               ) : (
                 project.tasks.map((task) => (
@@ -336,7 +415,10 @@ const ProjectDetail: React.FC = () => {
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
               <div className="space-y-2">
-                <button className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                <button 
+                  onClick={() => setIsAddTaskModalOpen(true)}
+                  className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Task
                 </button>
@@ -353,6 +435,15 @@ const ProjectDetail: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Add Task Modal */}
+      <AddTaskModal
+        isOpen={isAddTaskModalOpen}
+        onClose={() => setIsAddTaskModalOpen(false)}
+        onSubmit={handleAddTask}
+        users={users}
+        isSubmitting={isSubmittingTask}
+      />
     </div>
   );
 };

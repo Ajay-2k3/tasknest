@@ -157,7 +157,10 @@ export const updateChecklist = async (req, res) => {
       text: item.text,
       completed: item.completed || false,
       completedBy: item.completed && item.completedBy ? item.completedBy : undefined,
-      completedAt: item.completed && item.completedAt ? item.completedAt : undefined
+      completedAt: item.completed && item.completedAt ? item.completedAt : undefined,
+      createdBy: item.createdBy || req.user._id,
+      createdAt: item.createdAt || new Date(),
+      order: item.order !== undefined ? item.order : index
     }));
 
     // Add activity log entry
@@ -174,6 +177,7 @@ export const updateChecklist = async (req, res) => {
 
     // Populate the task for response
     await task.populate('checklist.completedBy', 'name email avatar');
+    await task.populate('checklist.createdBy', 'name email avatar');
 
     res.json({
       message: 'Checklist updated successfully',
@@ -240,7 +244,8 @@ export const getTask = async (req, res) => {
       .populate('createdBy', 'name email avatar')
       .populate('comments.user', 'name email avatar')
       .populate('activityLog.user', 'name email avatar')
-      .populate('checklist.completedBy', 'name email avatar');
+      .populate('checklist.completedBy', 'name email avatar')
+      .populate('checklist.createdBy', 'name email avatar');
 
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });

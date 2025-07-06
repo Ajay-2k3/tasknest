@@ -69,22 +69,30 @@ const Projects: React.FC = () => {
     }
   }, [searchTerm, statusFilter, priorityFilter]);
 
-  const fetchProjects = async () => {
-    try {
-      const params = new URLSearchParams();
-      if (searchTerm) params.append('search', searchTerm);
-      if (statusFilter !== 'all') params.append('status', statusFilter);
-      if (priorityFilter !== 'all') params.append('priority', priorityFilter);
+const fetchProjects = async () => {
+  try {
+    const token = localStorage.getItem('token'); // or however you're storing it
 
-      const response = await axios.get(`/projects?${params.toString()}`);
-      setProjects(response.data.projects);
-    } catch (error) {
-      console.error('Error fetching projects:', error);
-      showError('Error', 'Failed to fetch projects');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    const params = new URLSearchParams();
+    if (searchTerm) params.append('search', searchTerm);
+    if (statusFilter !== 'all') params.append('status', statusFilter);
+    if (priorityFilter !== 'all') params.append('priority', priorityFilter);
+
+    const response = await axios.get(`/projects?${params.toString()}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    setProjects(response.data.projects);
+  } catch (error) {
+    console.error('Error fetching projects:', error);
+    showError('Error', 'Failed to fetch projects');
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   const fetchUsers = async () => {
     try {

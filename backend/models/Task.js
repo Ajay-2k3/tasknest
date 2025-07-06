@@ -106,7 +106,7 @@ const taskSchema = new mongoose.Schema({
     action: {
       type: String,
       enum: [
-        'created', 'assigned', 'accepted', 'status_changed', 
+        'created', 'assigned', 'accepted', 'status_changed',
         'updated', 'commented', 'time_updated', 'checklist_updated',
         'file_uploaded', 'file_deleted'
       ],
@@ -168,10 +168,9 @@ const taskSchema = new mongoose.Schema({
       type: String,
       enum: ['daily', 'weekly', 'monthly'],
     },
-    interval: Number, // every N days/weeks/months
+    interval: Number,
     endDate: Date
   },
-  // Time tracking sessions for detailed logging
   timeSessions: [{
     startTime: {
       type: Date,
@@ -182,7 +181,7 @@ const taskSchema = new mongoose.Schema({
       required: true
     },
     duration: {
-      type: Number, // in seconds
+      type: Number,
       required: true
     },
     user: {
@@ -203,8 +202,8 @@ const taskSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Set completedAt when status changes to completed
-taskSchema.pre('save', function(next) {
+// Pre-save hook to set completedAt
+taskSchema.pre('save', function (next) {
   if (this.isModified('status')) {
     if (this.status === 'completed' && !this.completedAt) {
       this.completedAt = new Date();
@@ -215,33 +214,31 @@ taskSchema.pre('save', function(next) {
   next();
 });
 
-// Check if task is overdue
-taskSchema.virtual('isOverdue').get(function() {
-  return this.status !== 'completed' && new Date() > this.dueDate;
+// Virtuals
+taskSchema.virtual('isOverdue').get(function () {
+  return this.status !== 'completed' && this.dueDate && new Date() > this.dueDate;
 });
 
-// Calculate checklist progress
-taskSchema.virtual('checklistProgress').get(function() {
-  if (this.checklist.length === 0) return 0;
+taskSchema.virtual('checklistProgress').get(function () {
+  if (!Array.isArray(this.checklist) || this.checklist.length === 0) return 0;
   const completed = this.checklist.filter(item => item.completed).length;
   return Math.round((completed / this.checklist.length) * 100);
 });
 
-// Calculate time efficiency (actual vs estimated)
-taskSchema.virtual('timeEfficiency').get(function() {
-  if (this.estimatedHours === 0) return 0;
+taskSchema.virtual('timeEfficiency').get(function () {
+  if (!this.actualHours || this.actualHours === 0) return 0;
   return Math.round((this.estimatedHours / this.actualHours) * 100);
 });
 
-// Get total time from sessions
-taskSchema.virtual('totalSessionTime').get(function() {
+taskSchema.virtual('totalSessionTime').get(function () {
+  if (!Array.isArray(this.timeSessions)) return 0;
   return this.timeSessions.reduce((total, session) => total + session.duration, 0);
 });
 
-// Ensure virtual fields are serialized
+// Enable virtuals in JSON output
 taskSchema.set('toJSON', { virtuals: true });
 
-// Indexes for better query performance
+// Indexes
 taskSchema.index({ assignedTo: 1, status: 1 });
 taskSchema.index({ project: 1, status: 1 });
 taskSchema.index({ dueDate: 1, status: 1 });

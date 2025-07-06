@@ -14,7 +14,7 @@ const taskSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['todo', 'in-progress', 'review', 'completed'],
+    enum: ['todo', 'in-progress', 'review', 'completed', 'blocked'],
     default: 'todo'
   },
   priority: {
@@ -105,7 +105,7 @@ const taskSchema = new mongoose.Schema({
   activityLog: [{
     action: {
       type: String,
-      enum: ['created', 'assigned', 'accepted', 'status_changed', 'updated', 'commented'],
+      enum: ['created', 'assigned', 'accepted', 'status_changed', 'updated', 'commented', 'time_logged'],
       required: true
     },
     user: {

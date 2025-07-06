@@ -9,7 +9,9 @@ import {
   addComment,
   deleteTask,
   acceptTask,
-  updateChecklist
+  updateChecklist,
+  updateTaskStatus,
+  logTaskTime
 } from '../controllers/taskController.js';
 
 const router = express.Router();
@@ -39,6 +41,28 @@ router.post('/', authenticateToken, requireAdmin, [
 
 // Accept task
 router.patch('/:id/accept', authenticateToken, requireEmployee, acceptTask);
+
+// Update task status (NEW ROUTE - Team members only)
+router.patch('/:id/status', authenticateToken, requireEmployee, [
+  body('status').isIn(['todo', 'in-progress', 'blocked', 'completed']).withMessage('Invalid status value')
+], (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+  }
+  next();
+}, updateTaskStatus);
+
+// Log time worked (NEW ROUTE - Team members only)
+router.patch('/:id/time', authenticateToken, requireEmployee, [
+  body('hoursToAdd').isFloat({ min: 0.1 }).withMessage('Hours must be a positive number')
+], (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+  }
+  next();
+}, logTaskTime);
 
 // Update task
 router.put('/:id', authenticateToken, requireEmployee, [

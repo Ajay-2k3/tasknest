@@ -9,6 +9,11 @@ export const createTask = async (req, res) => {
   try {
     const { title, description, project, assignedTo, dueDate, priority, estimatedHours, tags, checklist } = req.body;
 
+    // Validate required fields
+    if (!title || !description || !project || !assignedTo || !dueDate) {
+      return res.status(400).json({ message: 'Title, description, project, assignedTo, and dueDate are required' });
+    }
+
     // Validate project exists
     const projectDoc = await Project.findById(project);
     if (!projectDoc) {
@@ -71,7 +76,7 @@ export const createTask = async (req, res) => {
       task
     });
   } catch (error) {
-    console.error('Create task error:', error);
+    console.error('❌ Create task error:', error);
     res.status(500).json({ message: 'Failed to create task', error: error.message });
   }
 };
@@ -122,7 +127,7 @@ export const acceptTask = async (req, res) => {
       task
     });
   } catch (error) {
-    console.error('Accept task error:', error);
+    console.error('❌ Accept task error:', error);
     res.status(500).json({ message: 'Failed to accept task', error: error.message });
   }
 };
@@ -159,7 +164,7 @@ export const updateChecklist = async (req, res) => {
       task
     });
   } catch (error) {
-    console.error('Update checklist error:', error);
+    console.error('❌ Update checklist error:', error);
     res.status(500).json({ message: 'Failed to update checklist', error: error.message });
   }
 };
@@ -205,7 +210,7 @@ export const getTasks = async (req, res) => {
       total
     });
   } catch (error) {
-    console.error('Fetch tasks error:', error);
+    console.error('❌ Fetch tasks error:', error);
     res.status(500).json({ message: 'Failed to fetch tasks', error: error.message });
   }
 };
@@ -236,7 +241,7 @@ export const getTask = async (req, res) => {
 
     res.json({ task });
   } catch (error) {
-    console.error('Fetch task error:', error);
+    console.error('❌ Fetch task error:', error);
     res.status(500).json({ message: 'Failed to fetch task', error: error.message });
   }
 };
@@ -297,7 +302,7 @@ export const updateTask = async (req, res) => {
       task
     });
   } catch (error) {
-    console.error('Update task error:', error);
+    console.error('❌ Update task error:', error);
     res.status(500).json({ message: 'Failed to update task', error: error.message });
   }
 };
@@ -311,6 +316,10 @@ export const addComment = async (req, res) => {
     }
 
     const { text } = req.body;
+    
+    if (!text || !text.trim()) {
+      return res.status(400).json({ message: 'Comment text is required' });
+    }
     
     // Extract mentions from comment text (@username)
     const mentionRegex = /@(\w+)/g;
@@ -361,7 +370,7 @@ export const addComment = async (req, res) => {
       comment: task.comments[task.comments.length - 1]
     });
   } catch (error) {
-    console.error('Add comment error:', error);
+    console.error('❌ Add comment error:', error);
     res.status(500).json({ message: 'Failed to add comment', error: error.message });
   }
 };
@@ -372,6 +381,11 @@ export const deleteTask = async (req, res) => {
     const task = await Task.findById(req.params.id);
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Check permissions - only admin or task creator can delete
+    if (req.user.role !== 'admin' && !task.createdBy.equals(req.user._id)) {
+      return res.status(403).json({ message: 'Not authorized to delete this task' });
     }
 
     // Remove task from project
@@ -393,7 +407,7 @@ export const deleteTask = async (req, res) => {
 
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
-    console.error('Delete task error:', error);
+    console.error('❌ Delete task error:', error);
     res.status(500).json({ message: 'Failed to delete task', error: error.message });
   }
 };

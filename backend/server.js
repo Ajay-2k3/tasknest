@@ -20,6 +20,7 @@ import notificationRoutes from './routes/notifications.js';
 import eventRoutes from './routes/events.js';
 import fileRoutes from './routes/files.js';
 import searchRoutes from './routes/search.js';
+import adminRoutes from './routes/admin.js';
 
 dotenv.config();
 

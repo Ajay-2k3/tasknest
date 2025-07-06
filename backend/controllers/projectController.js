@@ -8,6 +8,11 @@ export const createProject = async (req, res) => {
   try {
     const { name, description, startDate, endDate, priority, budget, team, tags } = req.body;
 
+    // Validate required fields
+    if (!name || !description || !startDate || !endDate) {
+      return res.status(400).json({ message: 'Name, description, start date, and end date are required' });
+    }
+
     // Validate dates
     if (new Date(endDate) <= new Date(startDate)) {
       return res.status(400).json({ message: 'End date must be after start date' });
@@ -106,9 +111,7 @@ export const getProjects = async (req, res) => {
   } catch (error) {
     console.error('❌ Fetch projects error:', error);
     res.status(500).json({ message: 'Failed to fetch projects', error: error.message });
-  }
-};
-
+  
 // Get single project by ID
 export const getProjectById = async (req, res) => {
   try {
@@ -150,11 +153,10 @@ export const getProjectById = async (req, res) => {
   } catch (error) {
     console.error('❌ Fetch project by ID error:', error);
     
-    // Handle invalid ObjectId
     if (error.name === 'CastError') {
       return res.status(400).json({ message: 'Invalid project ID format' });
     }
-    
+
     res.status(500).json({ message: 'Failed to fetch project', error: error.message });
   }
 };
@@ -168,6 +170,11 @@ export const updateProject = async (req, res) => {
     const project = await Project.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ message: 'Project not found' });
+    }
+
+    // Check permissions - only admin or project manager can update
+    if (req.user.role !== 'admin' && !project.manager.equals(req.user._id)) {
+      return res.status(403).json({ message: 'Not authorized to update this project' });
     }
 
     const updates = req.body;
@@ -216,6 +223,11 @@ export const deleteProject = async (req, res) => {
       return res.status(404).json({ message: 'Project not found' });
     }
 
+    // Check permissions - only admin can delete projects
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only administrators can delete projects' });
+    }
+
     // Delete all associated tasks
     await Task.deleteMany({ project: project._id });
 
@@ -234,5 +246,43 @@ export const deleteProject = async (req, res) => {
   } catch (error) {
     console.error('❌ Delete project error:', error);
     res.status(500).json({ message: 'Failed to delete project', error: error.message });
+  }
+};
+
+// Get admin's created tasks
+export const getMyTasks = async (req, res) => {
+  try {
+    const { status, priority, search, page = 1, limit = 20 } = req.query;
+    const query = { createdBy: req.user._id };
+
+    // Build query filters
+    if (status) query.status = status;
+    if (priority) query.priority = priority;
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const tasks = await Task.find(query)
+      .populate('project', 'name status priority')
+      .populate('assignedTo', 'name email avatar')
+      .populate('createdBy', 'name email avatar')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Task.countDocuments(query);
+
+    res.json({
+      tasks,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      total
+    });
+  } catch (error) {
+    console.error('❌ Fetch my tasks error:', error);
+    res.status(500).json({ message: 'Failed to fetch tasks', error: error.message });
   }
 };

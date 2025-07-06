@@ -5,7 +5,7 @@ import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get all users (admin only)
+// Get all users (admin only) - Enhanced with proper security
 router.get('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { role, department, search, page = 1, limit = 20 } = req.query;

@@ -151,13 +151,29 @@ export const updateChecklist = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to update this task' });
     }
 
-    task.checklist = checklistItems.map(item => ({
-      ...item,
-      completedBy: item.completed ? req.user._id : undefined,
-      completedAt: item.completed ? new Date() : undefined
+    // Process checklist items and ensure proper structure
+    task.checklist = checklistItems.map((item, index) => ({
+      _id: item._id || `item-${Date.now()}-${index}`,
+      text: item.text,
+      completed: item.completed || false,
+      completedBy: item.completed && item.completedBy ? item.completedBy : undefined,
+      completedAt: item.completed && item.completedAt ? item.completedAt : undefined
     }));
 
+    // Add activity log entry
+    task.activityLog.push({
+      action: 'checklist_updated',
+      user: req.user._id,
+      details: { 
+        totalItems: checklistItems.length,
+        completedItems: checklistItems.filter(item => item.completed).length
+      }
+    });
+
     await task.save();
+
+    // Populate the task for response
+    await task.populate('checklist.completedBy', 'name email avatar');
 
     res.json({
       message: 'Checklist updated successfully',
@@ -265,6 +281,7 @@ export const updateTask = async (req, res) => {
 
     const updates = req.body;
     const oldStatus = task.status;
+    const oldActualHours = task.actualHours;
 
     // Employees can only update certain fields
     if (req.user.role === 'employee' && !task.assignedTo.equals(req.user._id)) {
@@ -279,12 +296,24 @@ export const updateTask = async (req, res) => {
 
     Object.assign(task, updates);
 
-    // Add activity log entry for status changes
+    // Add activity log entries for significant changes
     if (oldStatus !== task.status) {
       task.activityLog.push({
         action: 'status_changed',
         user: req.user._id,
         details: { from: oldStatus, to: task.status }
+      });
+    }
+
+    if (oldActualHours !== task.actualHours) {
+      task.activityLog.push({
+        action: 'time_updated',
+        user: req.user._id,
+        details: { 
+          from: oldActualHours, 
+          to: task.actualHours,
+          difference: task.actualHours - oldActualHours
+        }
       });
     }
 

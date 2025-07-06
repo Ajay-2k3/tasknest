@@ -58,7 +58,9 @@ router.put('/:id', authenticateToken, requireEmployee, [
 
 // Update task checklist
 router.patch('/:id/checklist', authenticateToken, requireEmployee, [
-  body('checklistItems').isArray().withMessage('Checklist items must be an array')
+  body('checklistItems').isArray().withMessage('Checklist items must be an array'),
+  body('checklistItems.*.text').trim().isLength({ min: 1 }).withMessage('Checklist item text is required'),
+  body('checklistItems.*.completed').optional().isBoolean()
 ], (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

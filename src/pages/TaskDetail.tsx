@@ -16,6 +16,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import TaskAcceptance from '../components/TaskAcceptance';
 import FileUpload from '../components/FileUpload';
+import TimeTracker from '../components/TimeTracker';
+import StatusUpdateDropdown from '../components/StatusUpdateDropdown';
+import EnhancedChecklist from '../components/EnhancedChecklist';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import axios from 'axios';
 
@@ -153,17 +156,25 @@ const TaskDetail: React.FC = () => {
     } : null);
   };
 
-  const handleChecklistUpdate = async (checklistItems: any[]) => {
-    if (!task) return;
+  const handleTimeUpdate = (newHours: number) => {
+    setTask(prev => prev ? {
+      ...prev,
+      actualHours: newHours
+    } : null);
+  };
 
-    try {
-      const response = await axios.patch(`/tasks/${task._id}/checklist`, {
-        checklistItems
-      });
-      setTask(response.data.task);
-    } catch (error: any) {
-      showError('Error', error.response?.data?.message || 'Failed to update checklist');
-    }
+  const handleStatusUpdate = (newStatus: string) => {
+    setTask(prev => prev ? {
+      ...prev,
+      status: newStatus
+    } : null);
+  };
+
+  const handleChecklistUpdate = (updatedChecklist: any[]) => {
+    setTask(prev => prev ? {
+      ...prev,
+      checklist: updatedChecklist
+    } : null);
   };
 
   const getStatusColor = (status: string) => {
@@ -195,6 +206,8 @@ const TaskDetail: React.FC = () => {
     task.assignedTo._id === user.id || 
     task.createdBy._id === user.id
   );
+
+  const isAssignedToCurrentUser = user && task && task.assignedTo._id === user.id;
 
   if (isLoading) {
     return (
@@ -368,50 +381,15 @@ const TaskDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Checklist */}
-          {task.checklist.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Checklist ({task.checklist.filter(item => item.completed).length}/{task.checklist.length})
-              </h2>
-              
-              <div className="space-y-3">
-                {task.checklist.map((item, index) => (
-                  <div key={item._id} className="flex items-center space-x-3">
-                    <button
-                      onClick={() => {
-                        const updatedChecklist = [...task.checklist];
-                        updatedChecklist[index] = {
-                          ...item,
-                          completed: !item.completed,
-                          completedBy: !item.completed ? { _id: user!.id, name: user!.name } : undefined,
-                          completedAt: !item.completed ? new Date().toISOString() : undefined
-                        };
-                        handleChecklistUpdate(updatedChecklist);
-                      }}
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                        item.completed
-                          ? 'bg-green-500 border-green-500 text-white'
-                          : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      {item.completed && <CheckSquare className="w-3 h-3" />}
-                    </button>
-                    <div className="flex-1">
-                      <p className={`text-sm ${item.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                        {item.text}
-                      </p>
-                      {item.completed && item.completedBy && (
-                        <p className="text-xs text-gray-500">
-                          Completed by {item.completedBy.name} on {new Date(item.completedAt!).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Enhanced Checklist */}
+          <EnhancedChecklist
+            taskId={task._id}
+            checklist={task.checklist}
+            onChecklistUpdate={handleChecklistUpdate}
+            canEdit={isAssignedToCurrentUser || false}
+            currentUserId={user?.id || ''}
+            currentUserName={user?.name || ''}
+          />
 
           {/* File Attachments */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
@@ -507,6 +485,23 @@ const TaskDetail: React.FC = () => {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Time Tracker */}
+          <TimeTracker
+            taskId={task._id}
+            currentActualHours={task.actualHours}
+            estimatedHours={task.estimatedHours}
+            onTimeUpdate={handleTimeUpdate}
+            canTrack={isAssignedToCurrentUser || false}
+          />
+
+          {/* Status Update */}
+          <StatusUpdateDropdown
+            taskId={task._id}
+            currentStatus={task.status}
+            onStatusUpdate={handleStatusUpdate}
+            canUpdate={isAssignedToCurrentUser || false}
+          />
+
           {/* Task Info */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Task Information</h3>

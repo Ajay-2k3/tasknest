@@ -105,7 +105,10 @@ const taskSchema = new mongoose.Schema({
   activityLog: [{
     action: {
       type: String,
-      enum: ['created', 'assigned', 'accepted', 'status_changed', 'updated', 'commented'],
+      enum: [
+        'created', 'assigned', 'accepted', 'status_changed', 
+        'updated', 'commented', 'time_updated', 'checklist_updated'
+      ],
       required: true
     },
     user: {
@@ -120,9 +123,15 @@ const taskSchema = new mongoose.Schema({
     }
   }],
   checklist: [{
+    _id: {
+      type: String,
+      default: () => new mongoose.Types.ObjectId().toString()
+    },
     text: {
       type: String,
-      required: true
+      required: true,
+      trim: true,
+      maxlength: [200, 'Checklist item cannot exceed 200 characters']
     },
     completed: {
       type: Boolean,
@@ -132,7 +141,9 @@ const taskSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
-    completedAt: Date
+    completedAt: {
+      type: Date
+    }
   }],
   isRecurring: {
     type: Boolean,
@@ -145,7 +156,35 @@ const taskSchema = new mongoose.Schema({
     },
     interval: Number, // every N days/weeks/months
     endDate: Date
-  }
+  },
+  // Time tracking sessions for detailed logging
+  timeSessions: [{
+    startTime: {
+      type: Date,
+      required: true
+    },
+    endTime: {
+      type: Date,
+      required: true
+    },
+    duration: {
+      type: Number, // in seconds
+      required: true
+    },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    description: {
+      type: String,
+      maxlength: [200, 'Session description cannot exceed 200 characters']
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 }, {
   timestamps: true
 });
@@ -174,7 +213,24 @@ taskSchema.virtual('checklistProgress').get(function() {
   return Math.round((completed / this.checklist.length) * 100);
 });
 
+// Calculate time efficiency (actual vs estimated)
+taskSchema.virtual('timeEfficiency').get(function() {
+  if (this.estimatedHours === 0) return 0;
+  return Math.round((this.estimatedHours / this.actualHours) * 100);
+});
+
+// Get total time from sessions
+taskSchema.virtual('totalSessionTime').get(function() {
+  return this.timeSessions.reduce((total, session) => total + session.duration, 0);
+});
+
 // Ensure virtual fields are serialized
 taskSchema.set('toJSON', { virtuals: true });
+
+// Indexes for better query performance
+taskSchema.index({ assignedTo: 1, status: 1 });
+taskSchema.index({ project: 1, status: 1 });
+taskSchema.index({ dueDate: 1, status: 1 });
+taskSchema.index({ createdBy: 1, createdAt: -1 });
 
 export default mongoose.model('Task', taskSchema);

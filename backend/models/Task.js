@@ -107,7 +107,8 @@ const taskSchema = new mongoose.Schema({
       type: String,
       enum: [
         'created', 'assigned', 'accepted', 'status_changed', 
-        'updated', 'commented', 'time_updated', 'checklist_updated'
+        'updated', 'commented', 'time_updated', 'checklist_updated',
+        'file_uploaded', 'file_deleted'
       ],
       required: true
     },
@@ -143,6 +144,19 @@ const taskSchema = new mongoose.Schema({
     },
     completedAt: {
       type: Date
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    },
+    order: {
+      type: Number,
+      default: 0
     }
   }],
   isRecurring: {

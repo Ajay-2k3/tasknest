@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 // Import middleware
-import { apiLimiter } from './middleware/rateLimiter.js';
+import { apiLimiter, dashboardLimiter } from './middleware/rateLimiter.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -39,14 +39,17 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
-app.use('/api/', apiLimiter);
-
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Apply rate limiting strategically
+app.use('/api/auth', apiLimiter);
+app.use('/api/analytics', dashboardLimiter);
+app.use('/api/notifications', dashboardLimiter);
+app.use('/api/', apiLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -71,9 +74,15 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Global error handler
+// Enhanced global error handler
 app.use((err, req, res, next) => {
-  console.error('❌ Global error:', err.stack);
+  console.error('❌ Global error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    url: req.originalUrl,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
   
   // Mongoose validation error
   if (err.name === 'ValidationError') {
@@ -109,6 +118,11 @@ app.use((err, req, res, next) => {
   if (err.message === 'Only images and documents are allowed') {
     return res.status(400).json({ message: err.message });
   }
+
+  // MongoDB connection errors
+  if (err.name === 'MongoNetworkError' || err.name === 'MongooseServerSelectionError') {
+    return res.status(503).json({ message: 'Database connection error' });
+  }
   
   res.status(500).json({ 
     message: 'Something went wrong!', 
@@ -131,6 +145,9 @@ const connectDB = async () => {
     await mongoose.connect(MONGO_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
     });
     
     console.log('🚀 MongoDB connected successfully');

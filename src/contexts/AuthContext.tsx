@@ -111,7 +111,7 @@ const removeTokens = () => {
   localStorage.removeItem('refreshToken');
 };
 
-// ✅ Axios interceptors
+// ✅ Axios interceptors with improved error handling
 let isRefreshing = false;
 let failedQueue: any[] = [];
 
@@ -136,11 +136,18 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor for token refresh
+// Response interceptor for token refresh with better error handling
 axios.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // Handle rate limiting
+    if (error.response?.status === 429) {
+      console.warn('Rate limit exceeded, retrying after delay...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return axios(originalRequest);
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
@@ -189,8 +196,10 @@ axios.interceptors.response.use(
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // ✅ Check auth status on app load
+  // ✅ Check auth status on app load with debouncing
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
     const checkAuth = async () => {
       const token = getAccessToken();
       if (!token) {
@@ -212,7 +221,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     };
 
-    checkAuth();
+    // Debounce auth check to prevent multiple rapid calls
+    timeoutId = setTimeout(checkAuth, 100);
+    
+    return () => clearTimeout(timeoutId);
   }, []);
 
   const login = async (email: string, password: string) => {

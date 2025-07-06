@@ -65,6 +65,8 @@ export const createProject = async (req, res) => {
 // Get all projects
 export const getProjects = async (req, res) => {
   try {
+    console.log('📋 Fetching projects for user:', req.user?.email);
+    
     const { status, priority, search, page = 1, limit = 10 } = req.query;
     const query = {};
 
@@ -86,6 +88,8 @@ export const getProjects = async (req, res) => {
       ];
     }
 
+    console.log('🔍 Project query:', JSON.stringify(query, null, 2));
+
     const projects = await Project.find(query)
       .populate('manager', 'name email avatar')
       .populate('team', 'name email avatar role')
@@ -96,6 +100,8 @@ export const getProjects = async (req, res) => {
 
     const total = await Project.countDocuments(query);
 
+    console.log(`✅ Found ${projects.length} projects`);
+
     res.json({
       projects,
       totalPages: Math.ceil(total / limit),
@@ -105,13 +111,19 @@ export const getProjects = async (req, res) => {
   } catch (error) {
     console.error('❌ Fetch projects error:', error);
     res.status(500).json({ message: 'Failed to fetch projects', error: error.message });
-  }
-};
-
-// Get single project
-export const getProject = async (req, res) => {
+  
+// Get single project by ID
+export const getProjectById = async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id)
+    const { id } = req.params;
+    
+    console.log('📋 Fetching project by ID:', id);
+
+    if (!id) {
+      return res.status(400).json({ message: 'Project ID is required' });
+    }
+
+    const project = await Project.findById(id)
       .populate('manager', 'name email avatar department position')
       .populate('team', 'name email avatar role department position')
       .populate({
@@ -135,12 +147,22 @@ export const getProject = async (req, res) => {
       }
     }
 
+    console.log('✅ Project found:', project.name);
+
     res.json({ project });
   } catch (error) {
-    console.error('❌ Fetch project error:', error);
+    console.error('❌ Fetch project by ID error:', error);
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid project ID format' });
+    }
+
     res.status(500).json({ message: 'Failed to fetch project', error: error.message });
   }
 };
+
+// Get single project (alias for backward compatibility)
+export const getProject = getProjectById;
 
 // Update project
 export const updateProject = async (req, res) => {

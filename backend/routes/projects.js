@@ -5,6 +5,7 @@ import {
   createProject,
   getProjects,
   getProject,
+  getProjectById,
   updateProject,
   deleteProject,
   getMyTasks
@@ -12,11 +13,16 @@ import {
 
 const router = express.Router();
 
-// Get all projects
-router.get('/', authenticateToken, getProjects);
+// Add error handling middleware for this router
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
 
-// Get single project
-router.get('/:id', authenticateToken, getProject);
+// Get all projects
+router.get('/', authenticateToken, asyncHandler(getProjects));
+
+// Get single project by ID
+router.get('/:id', authenticateToken, asyncHandler(getProjectById));
 
 // Get admin's created tasks
 router.get('/admin/my-tasks', authenticateToken, requireAdmin, getMyTasks);
@@ -36,7 +42,7 @@ router.post('/', authenticateToken, requireAdmin, [
     return res.status(400).json({ message: 'Validation error', errors: errors.array() });
   }
   next();
-}, createProject);
+}, asyncHandler(createProject));
 
 // Update project (Admin only)
 router.put('/:id', authenticateToken, requireAdmin, [
@@ -54,9 +60,9 @@ router.put('/:id', authenticateToken, requireAdmin, [
     return res.status(400).json({ message: 'Validation error', errors: errors.array() });
   }
   next();
-}, updateProject);
+}, asyncHandler(updateProject));
 
 // Delete project (Admin only)
-router.delete('/:id', authenticateToken, requireAdmin, deleteProject);
+router.delete('/:id', authenticateToken, requireAdmin, asyncHandler(deleteProject));
 
 export default router;

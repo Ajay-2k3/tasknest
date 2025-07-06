@@ -13,6 +13,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import Modal from '../components/ui/Modal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -40,6 +41,7 @@ interface UserFormData {
 }
 
 const Users: React.FC = () => {
+  const { user: currentUser } = useAuth();
   const { showSuccess, showError } = useNotification();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -76,13 +78,14 @@ const Users: React.FC = () => {
   const onSubmit = async (data: UserFormData) => {
     setIsSubmitting(true);
     try {
-      await axios.post('/auth/register', data);
-      showSuccess('Success', 'User invited successfully');
+      // Use the admin-only route with proper authentication
+      await axios.post('/admin/create-user', data);
+      showSuccess('Success', 'User created successfully');
       setIsModalOpen(false);
       reset();
       fetchUsers();
     } catch (error: any) {
-      showError('Error', error.response?.data?.message || 'Failed to invite user');
+      showError('Error', error.response?.data?.message || 'Failed to create user');
     } finally {
       setIsSubmitting(false);
     }
@@ -142,7 +145,7 @@ const Users: React.FC = () => {
           className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all"
         >
           <Plus className="w-4 h-4 mr-2" />
-          Invite User
+          Create User
         </button>
       </div>
 
@@ -191,7 +194,7 @@ const Users: React.FC = () => {
           <p className="text-gray-500 mb-6">
             {searchTerm || roleFilter !== 'all' || departmentFilter !== 'all' 
               ? 'Try adjusting your filters to see more results.'
-              : 'Get started by inviting your first team member.'
+              : 'Get started by creating your first team member.'
             }
           </p>
           <button 
@@ -199,7 +202,7 @@ const Users: React.FC = () => {
             className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all"
           >
             <Plus className="w-4 h-4 mr-2" />
-            Invite User
+            Create User
           </button>
         </div>
       ) : (
@@ -309,7 +312,7 @@ const Users: React.FC = () => {
         </div>
       )}
 
-      {/* Invite User Modal */}
+      {/* Create User Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => {
@@ -317,7 +320,7 @@ const Users: React.FC = () => {
           reset();
           setShowPassword(false);
         }}
-        title="Invite New User"
+        title="Create New User"
         size="md"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -454,12 +457,12 @@ const Users: React.FC = () => {
               {isSubmitting ? (
                 <>
                   <LoadingSpinner size="sm" className="mr-2" />
-                  Inviting...
+                  Creating...
                 </>
               ) : (
                 <>
                   <UserPlus className="w-4 h-4 mr-2" />
-                  Invite User
+                  Create User
                 </>
               )}
             </button>

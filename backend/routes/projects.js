@@ -5,6 +5,7 @@ import {
   createProject,
   getProjects,
   getProject,
+  getProjectById,
   updateProject,
   deleteProject
 } from '../controllers/projectController.js';
@@ -19,8 +20,8 @@ const asyncHandler = (fn) => (req, res, next) => {
 // Get all projects
 router.get('/', authenticateToken, asyncHandler(getProjects));
 
-// Get single project
-router.get('/:id', authenticateToken, asyncHandler(getProject));
+// Get single project by ID
+router.get('/:id', authenticateToken, asyncHandler(getProjectById));
 
 // Create new project (Admin only)
 router.post('/', authenticateToken, requireAdmin, [

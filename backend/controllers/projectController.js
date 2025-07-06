@@ -1,6 +1,7 @@
 import Project from '../models/Project.js';
 import User from '../models/User.js';
 import Task from '../models/Task.js';
+import { createAuditLog } from '../middleware/auditLog.js';
 
 // Create new project
 export const createProject = async (req, res) => {
@@ -42,6 +43,9 @@ export const createProject = async (req, res) => {
 
     await project.populate('manager', 'name email avatar');
     await project.populate('team', 'name email avatar role');
+
+    // Create audit log
+    await createAuditLog(req, 'PROJECT_CREATE', 'Project', project._id);
 
     res.status(201).json({
       message: 'Project created successfully',
@@ -105,10 +109,18 @@ export const getProjects = async (req, res) => {
   }
 };
 
-// Get single project
-export const getProject = async (req, res) => {
+// Get single project by ID
+export const getProjectById = async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id)
+    const { id } = req.params;
+    
+    console.log('📋 Fetching project by ID:', id);
+
+    if (!id) {
+      return res.status(400).json({ message: 'Project ID is required' });
+    }
+
+    const project = await Project.findById(id)
       .populate('manager', 'name email avatar department position')
       .populate('team', 'name email avatar role department position')
       .populate({
@@ -132,12 +144,23 @@ export const getProject = async (req, res) => {
       }
     }
 
+    console.log('✅ Project found:', project.name);
+
     res.json({ project });
   } catch (error) {
-    console.error('❌ Fetch project error:', error);
+    console.error('❌ Fetch project by ID error:', error);
+    
+    // Handle invalid ObjectId
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid project ID format' });
+    }
+    
     res.status(500).json({ message: 'Failed to fetch project', error: error.message });
   }
 };
+
+// Get single project (alias for backward compatibility)
+export const getProject = getProjectById;
 
 // Update project
 export const updateProject = async (req, res) => {
@@ -172,6 +195,9 @@ export const updateProject = async (req, res) => {
     await project.populate('manager', 'name email avatar');
     await project.populate('team', 'name email avatar role');
 
+    // Create audit log
+    await createAuditLog(req, 'PROJECT_UPDATE', 'Project', project._id, updates);
+
     res.json({
       message: 'Project updated successfully',
       project
@@ -200,6 +226,9 @@ export const deleteProject = async (req, res) => {
     );
 
     await Project.findByIdAndDelete(req.params.id);
+
+    // Create audit log
+    await createAuditLog(req, 'PROJECT_DELETE', 'Project', req.params.id);
 
     res.json({ message: 'Project and associated tasks deleted successfully' });
   } catch (error) {

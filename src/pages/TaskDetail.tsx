@@ -198,23 +198,29 @@ const TaskDetail: React.FC = () => {
     }
   };
 
-  const canEdit = user && task && (
-    user.role === 'admin' || 
-    task.assignedTo._id === user.id || 
-    task.createdBy._id === user.id
-  );
+  // ✅ ACCESS CONTROL LOGIC - Implemented directly without separate function
+  const userId = user?.id || user?._id;
+  const userRole = user?.role;
+  const assignedToId = task?.assignedTo?._id;
+  const createdById = task?.createdBy?._id;
+  const taskStatus = task?.status;
 
-  const canUploadFiles = user && task && (
-    user.role === 'admin' || 
-    task.assignedTo._id === user.id || 
-    task.createdBy._id === user.id
-  );
+  // Core permission flags
+  const isAdmin = userRole === 'admin';
+  const isAssignedToCurrentUser = userId && assignedToId && userId.toString() === assignedToId.toString();
+  const isCreator = userId && createdById && userId.toString() === createdById.toString();
+  const isTaskCompleted = taskStatus === 'completed';
 
-  // CRITICAL: Only assigned team member can update status and interact with task
-  const canUpdateStatus = user && task && task.assignedTo._id === user.id;
-  const isAssignedMember = user && task && task.assignedTo._id === user.id;
-
-  const isAssignedToCurrentUser = isAssignedMember;
+  // Permission flags
+  const canEdit = isAdmin || isAssignedToCurrentUser || isCreator;
+  const canUploadFiles = canEdit;
+  const canUpdateStatus = isAssignedToCurrentUser && !isTaskCompleted;
+  const canTrackTime = isAssignedToCurrentUser && !isTaskCompleted;
+  const canDelete = isAdmin || isCreator;
+  const canViewActivity = canEdit;
+  const canComment = canEdit;
+  const canAcceptTask = isAssignedToCurrentUser && !task?.isAccepted;
+  const canCompleteTask = isAssignedToCurrentUser && taskStatus !== 'completed';
 
   if (isLoading) {
     return (
@@ -291,10 +297,10 @@ const TaskDetail: React.FC = () => {
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Task Acceptance */}
-          {user && !task.isAccepted && (
+          {canAcceptTask && (
             <TaskAcceptance
               task={task}
-              currentUserId={user.id}
+              currentUserId={userId || ''}
               onTaskAccepted={handleTaskAccepted}
             />
           )}
@@ -393,8 +399,8 @@ const TaskDetail: React.FC = () => {
             taskId={task._id}
             checklist={task.checklist}
             onChecklistUpdate={handleChecklistUpdate}
-            canEdit={isAssignedToCurrentUser || false}
-            currentUserId={user?.id || ''}
+            canEdit={isAssignedToCurrentUser}
+            currentUserId={userId || ''}
             currentUserName={user?.name || ''}
           />
 
@@ -404,102 +410,106 @@ const TaskDetail: React.FC = () => {
             attachments={task.attachments}
             onAttachmentUploaded={handleAttachmentUploaded}
             onAttachmentDeleted={handleAttachmentDeleted}
-            canUpload={canUploadFiles || false}
+            canUpload={canUploadFiles}
           />
 
           {/* Comments */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Comments ({task.comments.length})
-            </h2>
+          {canComment && (
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                Comments ({task.comments.length})
+              </h2>
 
-            {/* Add Comment Form */}
-            <form onSubmit={handleAddComment} className="mb-6">
-              <div className="flex space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
-                  <span className="text-white font-medium text-xs">
-                    {user?.name?.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <textarea
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Add a comment... (Use @username to mention someone)"
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  />
-                  <div className="flex justify-end mt-2">
-                    <button
-                      type="submit"
-                      disabled={!newComment.trim() || isSubmittingComment}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
-                    >
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      {isSubmittingComment ? 'Adding...' : 'Add Comment'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </form>
-
-            {/* Comments List */}
-            <div className="space-y-4">
-              {task.comments.map((comment) => (
-                <div key={comment._id} className="flex space-x-3">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full flex items-center justify-center">
+              {/* Add Comment Form */}
+              <form onSubmit={handleAddComment} className="mb-6">
+                <div className="flex space-x-3">
+                  <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
                     <span className="text-white font-medium text-xs">
-                      {comment.user.name.charAt(0).toUpperCase()}
+                      {user?.name?.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div className="flex-1">
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-900">
-                          {comment.user.name}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(comment.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-700">{comment.text}</p>
-                      {comment.mentions.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {comment.mentions.map((mention) => (
-                            <span
-                              key={mention._id}
-                              className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
-                            >
-                              @{mention.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Add a comment... (Use @username to mention someone)"
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    />
+                    <div className="flex justify-end mt-2">
+                      <button
+                        type="submit"
+                        disabled={!newComment.trim() || isSubmittingComment}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                      >
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        {isSubmittingComment ? 'Adding...' : 'Add Comment'}
+                      </button>
                     </div>
                   </div>
                 </div>
-              ))}
+              </form>
+
+              {/* Comments List */}
+              <div className="space-y-4">
+                {task.comments.map((comment) => (
+                  <div key={comment._id} className="flex space-x-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full flex items-center justify-center">
+                      <span className="text-white font-medium text-xs">
+                        {comment.user.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900">
+                            {comment.user.name}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(comment.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700">{comment.text}</p>
+                        {comment.mentions.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {comment.mentions.map((mention) => (
+                              <span
+                                key={mention._id}
+                                className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
+                              >
+                                @{mention.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Time Tracker */}
-          <TimeTracker
-            taskId={task._id}
-            currentActualHours={task.actualHours}
-            estimatedHours={task.estimatedHours}
-            onTimeUpdate={handleTimeUpdate}
-            canTrack={isAssignedToCurrentUser && task.status !== 'completed'}
-          />
+          {canTrackTime && (
+            <TimeTracker
+              taskId={task._id}
+              currentActualHours={task.actualHours}
+              estimatedHours={task.estimatedHours}
+              onTimeUpdate={handleTimeUpdate}
+              canTrack={canTrackTime}
+            />
+          )}
 
           {/* Status Update - ONLY for assigned team members */}
           <StatusUpdateDropdown
             taskId={task._id}
             currentStatus={task.status}
             onStatusUpdate={handleStatusUpdate}
-            canUpdate={canUpdateStatus || false}
+            canUpdate={canUpdateStatus}
           />
 
           {/* Task Info */}
@@ -520,8 +530,8 @@ const TaskDetail: React.FC = () => {
                 <div>
                   <span className="text-gray-600">Assigned to:</span>
                   <p className="font-medium">{task.assignedTo.name}</p>
-                  {canUpdateStatus && (
-                    <p className="text-xs text-green-600 mt-1">✓ You can update status</p>
+                  {isAssignedToCurrentUser && (
+                    <p className="text-xs text-green-600 mt-1">✓ You are assigned</p>
                   )}
                 </div>
               </div>
@@ -531,6 +541,9 @@ const TaskDetail: React.FC = () => {
                 <div>
                   <span className="text-gray-600">Created by:</span>
                   <p className="font-medium">{task.createdBy.name}</p>
+                  {isCreator && (
+                    <p className="text-xs text-blue-600 mt-1">✓ You created this</p>
+                  )}
                 </div>
               </div>
 
@@ -551,6 +564,19 @@ const TaskDetail: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* Permission Status Display */}
+              <div className="pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Your Permissions</h4>
+                <div className="space-y-1 text-xs">
+                  {canUpdateStatus && <p className="text-green-600">✓ Can update status</p>}
+                  {canTrackTime && <p className="text-green-600">✓ Can track time</p>}
+                  {canUploadFiles && <p className="text-green-600">✓ Can upload files</p>}
+                  {canEdit && <p className="text-green-600">✓ Can edit task</p>}
+                  {canDelete && <p className="text-green-600">✓ Can delete task</p>}
+                  {isAdmin && <p className="text-purple-600">👑 Admin access</p>}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -566,10 +592,12 @@ const TaskDetail: React.FC = () => {
                   <Edit className="w-4 h-4 mr-2" />
                   Edit Task
                 </button>
-                <button className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <Paperclip className="w-4 h-4 mr-2" />
-                  Add Attachment
-                </button>
+                {canUploadFiles && (
+                  <button className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <Paperclip className="w-4 h-4 mr-2" />
+                    Add Attachment
+                  </button>
+                )}
               </div>
             </div>
           )}

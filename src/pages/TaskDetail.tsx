@@ -490,7 +490,7 @@ const TaskDetail: React.FC = () => {
             currentActualHours={task.actualHours}
             estimatedHours={task.estimatedHours}
             onTimeUpdate={handleTimeUpdate}
-            canTrack={isAssignedToCurrentUser || false}
+            canTrack={isAssignedToCurrentUser && task.status !== 'completed'}
           />
 
           {/* Status Update - ONLY for assigned team members */}

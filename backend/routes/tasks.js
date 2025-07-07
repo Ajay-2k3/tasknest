@@ -97,4 +97,80 @@ router.post('/:id/comments', authenticateToken, requireEmployee, [
 // Delete task (Admin only)
 router.delete('/:id', authenticateToken, requireAdmin, deleteTask);
 
+// Add time tracking endpoint - ONLY for assigned users
+router.patch('/:id/time', authenticateToken, requireEmployee, [
+  body('hours')
+    .isFloat({ min: 0.1 })
+    .withMessage('Hours must be a positive number greater than 0')
+], async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ message: 'Validation error', errors: errors.array() });
+  }
+  next();
+}, async (req, res) => {
+  try {
+    const { hours } = req.body;
+    const taskId = req.params.id;
+
+    // Find the task
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // SECURITY: Only assigned user can track time
+    if (task.assignedTo.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ 
+        message: 'Only the assigned team member can track time on this task' 
+      });
+    }
+
+    // Don't allow time tracking on completed tasks
+    if (task.status === 'completed') {
+      return res.status(400).json({ 
+        message: 'Cannot track time on completed tasks' 
+      });
+    }
+
+    // Add time to actual hours
+    task.actualHours += parseFloat(hours);
+    
+    // Add activity log entry
+    task.activityLog.push({
+      action: 'time_added',
+      user: req.user._id,
+      details: { 
+        hoursAdded: parseFloat(hours),
+        totalHours: task.actualHours
+      }
+    });
+
+    await task.save();
+
+    // Populate task data for response
+    await task.populate('project', 'name status priority');
+    await task.populate('assignedTo', 'name email avatar');
+    await task.populate('createdBy', 'name email avatar');
+
+    // Create audit log
+    await createAuditLog(req, 'TIME_TRACKED', 'Task', task._id, { 
+      hoursAdded: parseFloat(hours),
+      totalActualHours: task.actualHours
+    });
+
+    res.json({
+      message: 'Time tracked successfully',
+      task,
+      hoursAdded: parseFloat(hours)
+    });
+  } catch (error) {
+    console.error('❌ Time tracking error:', error);
+    res.status(500).json({ 
+      message: 'Failed to track time', 
+      error: error.message 
+    });
+  }
+});
+
 export default router;

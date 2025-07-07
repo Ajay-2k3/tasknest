@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Clock, Save } from 'lucide-react';
+import { Play, Pause, Clock, Save, Plus } from 'lucide-react';
 import { useNotification } from '../contexts/NotificationContext';
 import axios from 'axios';
 
@@ -30,6 +30,8 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({
   });
   const [isTracking, setIsTracking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [manualHours, setManualHours] = useState<string>('');
+  const [isAddingManual, setIsAddingManual] = useState(false);
 
   // Update elapsed time every second when tracking
   useEffect(() => {
@@ -93,13 +95,14 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({
     setIsSaving(true);
     try {
       const additionalHours = formatHours(session.elapsedTime);
-      const newTotalHours = currentActualHours + additionalHours;
 
-      await axios.put(`/tasks/${taskId}`, {
-        actualHours: newTotalHours
+      
+      // Use the new time tracking endpoint
+      const response = await axios.patch(`/tasks/${taskId}/time`, {
+        hours: additionalHours
       });
 
-      onTimeUpdate(newTotalHours);
+      onTimeUpdate(response.data.task.actualHours);
       setSession({ startTime: null, elapsedTime: 0 });
       showSuccess('Success', `Added ${additionalHours} hours to task`);
     } catch (error: any) {
@@ -109,9 +112,39 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({
     }
   };
 
+  const handleAddManualTime = async () => {
+    const hours = parseFloat(manualHours);
+    
+    if (isNaN(hours) || hours <= 0) {
+      showError('Error', 'Please enter a valid number of hours');
+      return;
+    }
+
+    if (hours > 24) {
+      showError('Error', 'Cannot add more than 24 hours at once');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const response = await axios.patch(`/tasks/${taskId}/time`, {
+        hours: hours
+      });
+
+      onTimeUpdate(response.data.task.actualHours);
+      setManualHours('');
+      setIsAddingManual(false);
+      showSuccess('Success', `Added ${hours} hours to task`);
+    } catch (error: any) {
+      showError('Error', error.response?.data?.message || 'Failed to add time');
+    } finally {
+      setIsSaving(false);
+    }
+  };
   const getProgressPercentage = (): number => {
     if (estimatedHours === 0) return 0;
-    return Math.min((currentActualHours / estimatedHours) * 100, 100);
+    const percentage = (currentActualHours / estimatedHours) * 100;
+    return Math.min(percentage, 100);
   };
 
   const getProgressColor = (): string => {
@@ -175,7 +208,7 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({
         <div className="flex items-center justify-between text-xs mb-1">
           <span className="text-gray-600">Progress</span>
           <span className={`font-medium ${getProgressTextColor()}`}>
-            {Math.round(getProgressPercentage())}%
+            {getProgressPercentage().toFixed(0)}%
           </span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2">
@@ -247,6 +280,56 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({
         )}
       </div>
     </div>
+      {/* Manual Time Entry */}
+      <div className="border-t border-gray-200 pt-3">
+        {!isAddingManual ? (
+          <button
+            onClick={() => setIsAddingManual(true)}
+            className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Time Manually
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex space-x-2">
+              <input
+                type="number"
+                min="0.1"
+                max="24"
+                step="0.1"
+                value={manualHours}
+                onChange={(e) => setManualHours(e.target.value)}
+                placeholder="Hours"
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <button
+                onClick={handleAddManualTime}
+                disabled={isSaving || !manualHours}
+                className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSaving ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  'Add'
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setIsAddingManual(false);
+                  setManualHours('');
+                }}
+                className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              Enter hours worked (e.g., 2.5 for 2 hours 30 minutes)
+            </p>
+          </div>
+        )}
+      </div>
   );
 };
 

@@ -301,9 +301,7 @@ const Users: React.FC = () => {
                     >
                       {user.isActive ? 'Deactivate' : 'Activate'}
                     </button>
-                    <button className="flex-1 px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                      Edit
-                    </button>
+
                   </div>
                 </div>
               </div>

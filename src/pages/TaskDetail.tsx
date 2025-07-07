@@ -210,10 +210,11 @@ const TaskDetail: React.FC = () => {
     task.createdBy._id === user.id
   );
 
-  // CRITICAL: Only assigned team member can update status
-  const canUpdateStatus = true;
+  // CRITICAL: Only assigned team member can update status and interact with task
+  const canUpdateStatus = user && task && task.assignedTo._id === user.id;
+  const isAssignedMember = user && task && task.assignedTo._id === user.id;
 
-  const isAssignedToCurrentUser = user && task && task.assignedTo._id === user.id;
+  const isAssignedToCurrentUser = isAssignedMember;
 
   if (isLoading) {
     return (

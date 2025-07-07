@@ -18,7 +18,7 @@ interface EnhancedChecklistProps {
   taskId: string;
   checklist: ChecklistItem[];
   onChecklistUpdate: (updatedChecklist: ChecklistItem[]) => void;
-  canEdit: boolean;
+  canEdit: boolean; // This should be true only for assigned member
   currentUserId: string;
   currentUserName: string;
 }
@@ -43,7 +43,7 @@ const EnhancedChecklist: React.FC<EnhancedChecklistProps> = ({
 
   const handleToggleItem = async (itemIndex: number) => {
     if (!canEdit) {
-      showError('Error', 'You can only update checklist items on tasks assigned to you');
+      showError('Error', 'Only the assigned team member can update checklist items');
       return;
     }
 
@@ -105,7 +105,7 @@ const EnhancedChecklist: React.FC<EnhancedChecklistProps> = ({
 
   const handleRemoveItem = async (itemIndex: number) => {
     if (!canEdit) {
-      showError('Error', 'You can only remove checklist items on tasks assigned to you');
+      showError('Error', 'Only the assigned team member can remove checklist items');
       return;
     }
 

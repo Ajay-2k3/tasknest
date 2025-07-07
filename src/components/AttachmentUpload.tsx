@@ -106,7 +106,8 @@ const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
   };
 
   const handleDownload = (attachment: Attachment) => {
-    window.open(`${axios.defaults.baseURL}/files/${attachment.name}`, '_blank');
+    // Use the full URL from the attachment object
+    window.open(attachment.url, '_blank');
   };
 
   const handlePreview = (attachment: Attachment) => {
@@ -239,12 +240,16 @@ const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
                 {new Date(attachment.uploadedAt).toLocaleDateString()}
               </div>
 
-              {/* Preview for images */}
+              {/* Preview for images - Fixed to use full URL */}
               {attachment.mimeType.startsWith('image/') && (
                 <div className="mb-3">
                   <img
-                    src={`${axios.defaults.baseURL}/files/${attachment.name}`}
+                    src={attachment.url}
                     alt={attachment.originalName}
+                    onError={(e) => {
+                      console.error('Image failed to load:', attachment.url);
+                      e.currentTarget.style.display = 'none';
+                    }}
                     className="w-full h-32 object-cover rounded cursor-pointer"
                     onClick={() => handlePreview(attachment)}
                   />
@@ -293,7 +298,7 @@ const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
         </div>
       )}
 
-      {/* File Preview Modal */}
+      {/* File Preview Modal - Fixed to use full URL */}
       {previewFile && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
@@ -318,13 +323,17 @@ const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
               <div className="max-h-96 overflow-auto">
                 {previewFile.mimeType.startsWith('image/') ? (
                   <img
-                    src={`${axios.defaults.baseURL}/files/${previewFile.name}`}
+                    src={previewFile.url}
                     alt={previewFile.originalName}
+                    onError={(e) => {
+                      console.error('Preview image failed to load:', previewFile.url);
+                      e.currentTarget.style.display = 'none';
+                    }}
                     className="w-full h-auto"
                   />
                 ) : previewFile.mimeType === 'application/pdf' ? (
                   <iframe
-                    src={`${axios.defaults.baseURL}/files/${previewFile.name}`}
+                    src={previewFile.url}
                     className="w-full h-96"
                     title={previewFile.originalName}
                   />

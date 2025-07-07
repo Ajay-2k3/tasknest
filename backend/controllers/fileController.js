@@ -69,10 +69,13 @@ export const uploadTaskFile = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to upload files to this task' });
     }
 
+    // Generate full URL for the uploaded file
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+
     const attachment = {
       name: req.file.filename,
       originalName: req.file.originalname,
-      url: `/uploads/${req.file.filename}`,
+      url: fileUrl, // Use full URL instead of relative path
       size: req.file.size,
       mimeType: req.file.mimetype,
       uploadedBy: req.user._id,

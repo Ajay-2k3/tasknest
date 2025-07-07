@@ -141,6 +141,7 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({
       setIsSaving(false);
     }
   };
+
   const getProgressPercentage = (): number => {
     if (estimatedHours === 0) return 0;
     const percentage = (currentActualHours / estimatedHours) * 100;
@@ -279,9 +280,9 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({
           </button>
         )}
       </div>
-    </div>
+
       {/* Manual Time Entry */}
-      <div className="border-t border-gray-200 pt-3">
+      <div className="border-t border-gray-200 pt-3 mt-3">
         {!isAddingManual ? (
           <button
             onClick={() => setIsAddingManual(true)}
@@ -330,6 +331,7 @@ const TimeTracker: React.FC<TimeTrackerProps> = ({
           </div>
         )}
       </div>
+    </div>
   );
 };
 

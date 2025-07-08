@@ -26,8 +26,7 @@ const Login: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    setIsLoading(true);
-
+    try {
       await login(email, password);
       showSuccess('Welcome!', 'Successfully logged in to TaskNest');
     } catch (error: any) {

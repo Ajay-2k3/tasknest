@@ -58,6 +58,13 @@ function App() {
                       <Users />
                     </ProtectedRoute>
                   } />
+                  
+                  {/* Alias route for tenants (same as users for admin) */}
+                  <Route path="admin/tenants" element={
+                    <ProtectedRoute requireAdmin>
+                      <Users />
+                    </ProtectedRoute>
+                  } />
                 </Route>
                 
                 {/* Catch all - 404 */}

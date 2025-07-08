@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios, { AxiosError } from 'axios';
 
 // ✅ Use local backend for development
@@ -188,6 +189,8 @@ axios.interceptors.response.use(
 // ✅ AuthProvider Component
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // ✅ Check auth status on app load
   useEffect(() => {
@@ -200,7 +203,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       try {
         const response = await axios.get('/auth/verify');
-        dispatch({ type: 'AUTH_SUCCESS', payload: response.data.user });
+        const user = response.data.user;
+        dispatch({ type: 'AUTH_SUCCESS', payload: user });
+        
+        // Auto-redirect based on role and current path
+        const currentPath = location.pathname;
+        const isOnLoginPage = currentPath === '/login';
+        const isOnRootPage = currentPath === '/';
+        
+        if (isOnLoginPage || isOnRootPage) {
+          if (user.role === 'admin') {
+            navigate('/dashboard', { replace: true });
+          } else if (user.role === 'employee') {
+            navigate('/dashboard', { replace: true });
+          }
+        }
       } catch (error) {
         const err = error as AxiosError;
         if (err.response?.status === 401) {
@@ -213,7 +230,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     checkAuth();
-  }, []);
+  }, [navigate, location.pathname]);
 
   const login = async (email: string, password: string) => {
     dispatch({ type: 'AUTH_START' });
@@ -223,6 +240,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       setTokens(accessToken, refreshToken);
       dispatch({ type: 'AUTH_SUCCESS', payload: user });
+      
+      // Role-based redirect after login
+      const from = location.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
     } catch (error: any) {
       const message = error.response?.data?.message || 'Login failed';
       dispatch({ type: 'AUTH_FAILURE', payload: message });

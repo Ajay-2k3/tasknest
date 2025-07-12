@@ -15,6 +15,7 @@ import TaskDetail from './pages/TaskDetail';
 import Analytics from './pages/Analytics';
 import Profile from './pages/Profile';
 import Users from './pages/Users';
+import TenantManagement from './pages/TenantManagement';
 import Calendar from './pages/Calendar';
 import NotificationCenter from './pages/NotificationCenter';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -59,10 +60,10 @@ function App() {
                     </ProtectedRoute>
                   } />
                   
-                  {/* Alias route for tenants (same as users for admin) */}
+                  {/* Tenant management route */}
                   <Route path="admin/tenants" element={
                     <ProtectedRoute requireAdmin>
-                      <Users />
+                      <TenantManagement />
                     </ProtectedRoute>
                   } />
                 </Route>

@@ -21,6 +21,7 @@ import eventRoutes from './routes/events.js';
 import fileRoutes from './routes/files.js';
 import searchRoutes from './routes/search.js';
 import adminRoutes from './routes/admin.js';
+import tenantRoutes from './routes/tenants.js';
 
 dotenv.config();
 
@@ -60,6 +61,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/tenants', tenantRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

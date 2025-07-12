@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { X, User, Mail, Lock, Phone, Home, Eye, EyeOff } from 'lucide-react';
+import React from 'react';
+import { useForm } from 'react-hook-form';
+import { X, User, Mail, Lock, Phone, Home, Eye, EyeOff, UserPlus } from 'lucide-react';
 import { useNotification } from '../contexts/NotificationContext';
+import { useMutation } from '../hooks/useApi';
+import { tenantsAPI } from '../services/api';
 import LoadingSpinner from './ui/LoadingSpinner';
-import axios from 'axios';
 
 interface AddTenantModalProps {
   isOpen: boolean;
@@ -22,65 +24,28 @@ interface TenantFormData {
 
 const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTenantAdded }) => {
   const { showSuccess, showError } = useNotification();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState<TenantFormData>({
-    name: '',
-    email: '',
-    password: '',
-    contactNumber: '',
-    roomNumber: '',
-    department: '',
-    position: ''
-  });
+  const [showPassword, setShowPassword] = React.useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
-  };
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<TenantFormData>();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.name || !formData.email || !formData.password) {
-      showError('Error', 'Please fill in all required fields');
-      return;
+  // Create tenant mutation
+  const { execute: createTenant, loading: isSubmitting } = useMutation(
+    tenantsAPI.createTenant,
+    {
+      onSuccess: (data) => {
+        showSuccess('Success', 'Team member added successfully');
+        onTenantAdded(data.tenant);
+        onClose();
+        reset();
+      },
+      onError: (error) => {
+        showError('Error', error);
+      }
     }
+  );
 
-    if (formData.password.length < 6) {
-      showError('Error', 'Password must be at least 6 characters');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      // Using the admin create user endpoint
-      const response = await axios.post('/admin/create-user', {
-        ...formData,
-        role: 'employee' // All tenants are employees by default
-      });
-      
-      showSuccess('Success', 'Team member added successfully');
-      onTenantAdded(response.data.user);
-      onClose();
-      
-      // Reset form
-      setFormData({
-        name: '',
-        email: '',
-        password: '',
-        contactNumber: '',
-        roomNumber: '',
-        department: '',
-        position: ''
-      });
-    } catch (error: any) {
-      showError('Error', error.response?.data?.message || 'Failed to add team member');
-    } finally {
-      setIsSubmitting(false);
-    }
+  const onSubmit = async (data: TenantFormData) => {
+    await createTenant(data);
   };
 
   if (!isOpen) return null;
@@ -108,7 +73,7 @@ const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTena
             </button>
           </div>
           
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Full Name *
@@ -119,14 +84,17 @@ const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTena
                 </div>
                 <input
                   type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
+                  {...register('name', { 
+                    required: 'Name is required',
+                    minLength: { value: 2, message: 'Name must be at least 2 characters' }
+                  })}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="Enter full name"
                 />
               </div>
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+              )}
             </div>
 
             <div>
@@ -139,14 +107,20 @@ const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTena
                 </div>
                 <input
                   type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
+                  {...register('email', { 
+                    required: 'Email is required',
+                    pattern: {
+                      value: /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+                      message: 'Please enter a valid email'
+                    }
+                  })}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="Enter email address"
                 />
               </div>
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              )}
             </div>
 
             <div>
@@ -159,10 +133,10 @@ const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTena
                 </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
+                  {...register('password', { 
+                    required: 'Password is required',
+                    minLength: { value: 6, message: 'Password must be at least 6 characters' }
+                  })}
                   className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="Enter password"
                 />
@@ -178,6 +152,9 @@ const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTena
                   )}
                 </button>
               </div>
+              {errors.password && (
+                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+              )}
             </div>
 
             <div>
@@ -190,11 +167,26 @@ const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTena
                 </div>
                 <input
                   type="tel"
-                  name="contactNumber"
-                  value={formData.contactNumber}
-                  onChange={handleChange}
+                  {...register('contactNumber')}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   placeholder="Enter contact number"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Room Number
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Home className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  {...register('roomNumber')}
+                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  placeholder="Enter room number"
                 />
               </div>
             </div>
@@ -205,9 +197,7 @@ const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTena
               </label>
               <input
                 type="text"
-                name="department"
-                value={formData.department}
-                onChange={handleChange}
+                {...register('department')}
                 className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="e.g., Engineering, Marketing"
               />
@@ -219,9 +209,7 @@ const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTena
               </label>
               <input
                 type="text"
-                name="position"
-                value={formData.position}
-                onChange={handleChange}
+                {...register('position')}
                 className="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 placeholder="e.g., Senior Developer, Project Manager"
               />
@@ -246,7 +234,10 @@ const AddTenantModal: React.FC<AddTenantModalProps> = ({ isOpen, onClose, onTena
                     Adding...
                   </>
                 ) : (
-                  'Add Team Member'
+                  <>
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Add Team Member
+                  </>
                 )}
               </button>
             </div>

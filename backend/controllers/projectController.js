@@ -163,6 +163,7 @@ export const getProjectById = async (req, res) => {
 
 // Get single project (alias for backward compatibility)
 export const getProject = getProjectById;
+}
 
 // Update project
 export const updateProject = async (req, res) => {

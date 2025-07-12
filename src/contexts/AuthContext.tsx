@@ -208,14 +208,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         
         // Auto-redirect based on role and current path
         const currentPath = location.pathname;
-        const isOnLoginPage = currentPath === '/login';
+        const isOnLoginPage = currentPath === '/login' || currentPath === '/admin/login' || currentPath === '/tenant/login';
         const isOnRootPage = currentPath === '/';
         
         if (isOnLoginPage || isOnRootPage) {
           if (user.role === 'admin') {
-            navigate('/dashboard', { replace: true });
+            navigate('/admin/dashboard', { replace: true });
           } else if (user.role === 'employee') {
-            navigate('/dashboard', { replace: true });
+            navigate('/tenant/dashboard', { replace: true });
           }
         }
       } catch (error) {
@@ -242,8 +242,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       dispatch({ type: 'AUTH_SUCCESS', payload: user });
       
       // Role-based redirect after login
-      const from = location.state?.from?.pathname || '/dashboard';
-      navigate(from, { replace: true });
+      const from = location.state?.from?.pathname;
+      
+      if (from) {
+        navigate(from, { replace: true });
+      } else {
+        // Default redirect based on role
+        if (user.role === 'admin') {
+          navigate('/admin/dashboard', { replace: true });
+        } else if (user.role === 'employee') {
+          navigate('/tenant/dashboard', { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
+      }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Login failed';
       dispatch({ type: 'AUTH_FAILURE', payload: message });

@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
 import axios, { AxiosError } from 'axios';
 
 // ✅ Use local backend for development
@@ -112,7 +111,7 @@ const removeTokens = () => {
   localStorage.removeItem('refreshToken');
 };
 
-// ✅ Axios interceptors
+// ✅ Axios interceptors with improved error handling
 let isRefreshing = false;
 let failedQueue: any[] = [];
 
@@ -137,11 +136,18 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor for token refresh
+// Response interceptor for token refresh with better error handling
 axios.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // Handle rate limiting
+    if (error.response?.status === 429) {
+      console.warn('Rate limit exceeded, retrying after delay...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return axios(originalRequest);
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
@@ -189,11 +195,11 @@ axios.interceptors.response.use(
 // ✅ AuthProvider Component
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
-  const navigate = useNavigate();
-  const location = useLocation();
 
-  // ✅ Check auth status on app load
+  // ✅ Check auth status on app load with debouncing
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
     const checkAuth = async () => {
       const token = getAccessToken();
       if (!token) {
@@ -203,21 +209,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       try {
         const response = await axios.get('/auth/verify');
-        const user = response.data.user;
-        dispatch({ type: 'AUTH_SUCCESS', payload: user });
-        
-        // Auto-redirect based on role and current path
-        const currentPath = location.pathname;
-        const isOnLoginPage = currentPath === '/login' || currentPath === '/admin/login' || currentPath === '/tenant/login';
-        const isOnRootPage = currentPath === '/';
-        
-        if (isOnLoginPage || isOnRootPage) {
-          if (user.role === 'admin') {
-            navigate('/admin/dashboard', { replace: true });
-          } else if (user.role === 'employee') {
-            navigate('/tenant/dashboard', { replace: true });
-          }
-        }
+        dispatch({ type: 'AUTH_SUCCESS', payload: response.data.user });
       } catch (error) {
         const err = error as AxiosError;
         if (err.response?.status === 401) {
@@ -229,8 +221,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     };
 
-    checkAuth();
-  }, [navigate, location.pathname]);
+    // Debounce auth check to prevent multiple rapid calls
+    timeoutId = setTimeout(checkAuth, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, []);
 
   const login = async (email: string, password: string) => {
     dispatch({ type: 'AUTH_START' });
@@ -240,22 +235,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       setTokens(accessToken, refreshToken);
       dispatch({ type: 'AUTH_SUCCESS', payload: user });
-      
-      // Role-based redirect after login
-      const from = location.state?.from?.pathname;
-      
-      if (from) {
-        navigate(from, { replace: true });
-      } else {
-        // Default redirect based on role
-        if (user.role === 'admin') {
-          navigate('/admin/dashboard', { replace: true });
-        } else if (user.role === 'employee') {
-          navigate('/tenant/dashboard', { replace: true });
-        } else {
-          navigate('/dashboard', { replace: true });
-        }
-      }
     } catch (error: any) {
       const message = error.response?.data?.message || 'Login failed';
       dispatch({ type: 'AUTH_FAILURE', payload: message });

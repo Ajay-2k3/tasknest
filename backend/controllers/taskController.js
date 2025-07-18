@@ -132,29 +132,41 @@ export const acceptTask = async (req, res) => {
   }
 };
 
-// Update task status (NEW ROUTE)
+// Update task status (ONLY for assigned team members)
 export const updateTaskStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const task = await Task.findById(req.params.id);
     
+    // Validate status value
+    const validStatuses = ['todo', 'in-progress', 'review', 'completed'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        message: 'Invalid status. Must be one of: todo, in-progress, review, completed' 
+      });
+    }
+
+    // Find the task
+    const task = await Task.findById(req.params.id);
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Check if user is assigned to this task
-    if (!task.assignedTo.equals(req.user._id)) {
-      return res.status(403).json({ message: 'You can only update status of tasks assigned to you' });
-    }
-
-    // Validate status
-    const validStatuses = ['todo', 'in-progress', 'blocked', 'completed'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: 'Invalid status value' });
+    // CRITICAL: Only assigned team member can update status
+    if (task.assignedTo.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ 
+        message: 'Not authorized to update this task status. Only the assigned team member can update task status.' 
+      });
     }
 
     const oldStatus = task.status;
     task.status = status;
+
+    // Set completion date if task is completed
+    if (status === 'completed' && oldStatus !== 'completed') {
+      task.completedAt = new Date();
+    } else if (status !== 'completed') {
+      task.completedAt = null;
+    }
 
     // Add activity log entry
     task.activityLog.push({
@@ -165,11 +177,12 @@ export const updateTaskStatus = async (req, res) => {
 
     await task.save();
 
+    // Populate task data for response
     await task.populate('project', 'name status priority');
     await task.populate('assignedTo', 'name email avatar');
     await task.populate('createdBy', 'name email avatar');
 
-    // Notify task creator if status changed to completed
+    // Notify task creator and project manager about status change
     if (status === 'completed') {
       await createNotification(
         task.createdBy,
@@ -181,7 +194,10 @@ export const updateTaskStatus = async (req, res) => {
     }
 
     // Create audit log
-    await createAuditLog(req, 'TASK_STATUS_UPDATE', 'Task', task._id, { from: oldStatus, to: status });
+    await createAuditLog(req, 'TASK_STATUS_UPDATE', 'Task', task._id, { 
+      oldStatus, 
+      newStatus: status 
+    });
 
     res.json({
       message: 'Task status updated successfully',
@@ -189,57 +205,10 @@ export const updateTaskStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Update task status error:', error);
-    res.status(500).json({ message: 'Failed to update task status', error: error.message });
-  }
-};
-
-// Log time worked (NEW ROUTE)
-export const logTaskTime = async (req, res) => {
-  try {
-    const { hoursToAdd } = req.body;
-    const task = await Task.findById(req.params.id);
-    
-    if (!task) {
-      return res.status(404).json({ message: 'Task not found' });
-    }
-
-    // Check if user is assigned to this task
-    if (!task.assignedTo.equals(req.user._id)) {
-      return res.status(403).json({ message: 'You can only log time for tasks assigned to you' });
-    }
-
-    // Validate hours
-    const hours = parseFloat(hoursToAdd);
-    if (isNaN(hours) || hours <= 0) {
-      return res.status(400).json({ message: 'Hours must be a positive number' });
-    }
-
-    // Add hours to actual hours
-    task.actualHours = (task.actualHours || 0) + hours;
-
-    // Add activity log entry
-    task.activityLog.push({
-      action: 'time_logged',
-      user: req.user._id,
-      details: { hoursAdded: hours, totalHours: task.actualHours }
+    res.status(500).json({ 
+      message: 'Failed to update task status', 
+      error: error.message 
     });
-
-    await task.save();
-
-    await task.populate('project', 'name status priority');
-    await task.populate('assignedTo', 'name email avatar');
-    await task.populate('createdBy', 'name email avatar');
-
-    // Create audit log
-    await createAuditLog(req, 'TASK_TIME_LOG', 'Task', task._id, { hoursAdded: hours });
-
-    res.json({
-      message: 'Time logged successfully',
-      task
-    });
-  } catch (error) {
-    console.error('❌ Log task time error:', error);
-    res.status(500).json({ message: 'Failed to log time', error: error.message });
   }
 };
 
@@ -262,13 +231,33 @@ export const updateChecklist = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to update this task' });
     }
 
-    task.checklist = checklistItems.map(item => ({
-      ...item,
-      completedBy: item.completed ? req.user._id : undefined,
-      completedAt: item.completed ? new Date() : undefined
+    // Process checklist items and ensure proper structure
+    task.checklist = checklistItems.map((item, index) => ({
+      _id: item._id || `item-${Date.now()}-${index}`,
+      text: item.text,
+      completed: item.completed || false,
+      completedBy: item.completed && item.completedBy ? item.completedBy : undefined,
+      completedAt: item.completed && item.completedAt ? item.completedAt : undefined,
+      createdBy: item.createdBy || req.user._id,
+      createdAt: item.createdAt || new Date(),
+      order: item.order !== undefined ? item.order : index
     }));
 
+    // Add activity log entry
+    task.activityLog.push({
+      action: 'checklist_updated',
+      user: req.user._id,
+      details: { 
+        totalItems: checklistItems.length,
+        completedItems: checklistItems.filter(item => item.completed).length
+      }
+    });
+
     await task.save();
+
+    // Populate the task for response
+    await task.populate('checklist.completedBy', 'name email avatar');
+    await task.populate('checklist.createdBy', 'name email avatar');
 
     res.json({
       message: 'Checklist updated successfully',
@@ -335,7 +324,8 @@ export const getTask = async (req, res) => {
       .populate('createdBy', 'name email avatar')
       .populate('comments.user', 'name email avatar')
       .populate('activityLog.user', 'name email avatar')
-      .populate('checklist.completedBy', 'name email avatar');
+      .populate('checklist.completedBy', 'name email avatar')
+      .populate('checklist.createdBy', 'name email avatar');
 
     if (!task) {
       return res.status(404).json({ message: 'Task not found' });
@@ -376,6 +366,7 @@ export const updateTask = async (req, res) => {
 
     const updates = req.body;
     const oldStatus = task.status;
+    const oldActualHours = task.actualHours;
 
     // Employees can only update certain fields
     if (req.user.role === 'employee' && !task.assignedTo.equals(req.user._id)) {
@@ -390,12 +381,24 @@ export const updateTask = async (req, res) => {
 
     Object.assign(task, updates);
 
-    // Add activity log entry for status changes
+    // Add activity log entries for significant changes
     if (oldStatus !== task.status) {
       task.activityLog.push({
         action: 'status_changed',
         user: req.user._id,
         details: { from: oldStatus, to: task.status }
+      });
+    }
+
+    if (oldActualHours !== task.actualHours) {
+      task.activityLog.push({
+        action: 'time_updated',
+        user: req.user._id,
+        details: { 
+          from: oldActualHours, 
+          to: task.actualHours,
+          difference: task.actualHours - oldActualHours
+        }
       });
     }
 

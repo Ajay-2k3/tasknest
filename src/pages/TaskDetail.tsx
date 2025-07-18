@@ -15,8 +15,10 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import TaskAcceptance from '../components/TaskAcceptance';
-import TaskProgressControls from '../components/TaskProgressControls';
-import FileUpload from '../components/FileUpload';
+import AttachmentUpload from '../components/AttachmentUpload';
+import TimeTracker from '../components/TimeTracker';
+import StatusUpdateDropdown from '../components/StatusUpdateDropdown';
+import EnhancedChecklist from '../components/EnhancedChecklist';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import axios from 'axios';
 
@@ -59,6 +61,9 @@ interface Task {
     completed: boolean;
     completedBy?: { _id: string; name: string };
     completedAt?: string;
+    createdBy: { _id: string; name: string };
+    createdAt: string;
+    order: number;
   }>;
 }
 
@@ -140,35 +145,39 @@ const TaskDetail: React.FC = () => {
     setTask(updatedTask);
   };
 
-  const handleTaskUpdated = (updatedTask: Task) => {
-    setTask(updatedTask);
-  };
-
-  const handleFileUploaded = (attachment: any) => {
+  const handleAttachmentUploaded = (attachment: any) => {
     setTask(prev => prev ? {
       ...prev,
       attachments: [...prev.attachments, attachment]
     } : null);
   };
 
-  const handleFileDeleted = (attachmentId: string) => {
+  const handleAttachmentDeleted = (attachmentId: string) => {
     setTask(prev => prev ? {
       ...prev,
       attachments: prev.attachments.filter(att => att._id !== attachmentId)
     } : null);
   };
 
-  const handleChecklistUpdate = async (checklistItems: any[]) => {
-    if (!task) return;
+  const handleTimeUpdate = (newHours: number) => {
+    setTask(prev => prev ? {
+      ...prev,
+      actualHours: newHours
+    } : null);
+  };
 
-    try {
-      const response = await axios.patch(`/tasks/${task._id}/checklist`, {
-        checklistItems
-      });
-      setTask(response.data.task);
-    } catch (error: any) {
-      showError('Error', error.response?.data?.message || 'Failed to update checklist');
-    }
+  const handleStatusUpdate = (newStatus: string) => {
+    setTask(prev => prev ? {
+      ...prev,
+      status: newStatus
+    } : null);
+  };
+
+  const handleChecklistUpdate = (updatedChecklist: any[]) => {
+    setTask(prev => prev ? {
+      ...prev,
+      checklist: updatedChecklist
+    } : null);
   };
 
   const getStatusColor = (status: string) => {
@@ -176,7 +185,6 @@ const TaskDetail: React.FC = () => {
       case 'completed': return 'bg-green-100 text-green-800';
       case 'in-progress': return 'bg-blue-100 text-blue-800';
       case 'review': return 'bg-yellow-100 text-yellow-800';
-      case 'blocked': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -190,17 +198,29 @@ const TaskDetail: React.FC = () => {
     }
   };
 
-  const canEdit = user && task && (
-    user.role === 'admin' || 
-    task.assignedTo._id === user.id || 
-    task.createdBy._id === user.id
-  );
+  // ✅ ACCESS CONTROL LOGIC - Implemented directly without separate function
+  const userId = user?.id || user?._id;
+  const userRole = user?.role;
+  const assignedToId = task?.assignedTo?._id;
+  const createdById = task?.createdBy?._id;
+  const taskStatus = task?.status;
 
-  const canUploadFiles = user && task && (
-    user.role === 'admin' || 
-    task.assignedTo._id === user.id || 
-    task.createdBy._id === user.id
-  );
+  // Core permission flags
+  const isAdmin = userRole === 'admin';
+  const isAssignedToCurrentUser = userId && assignedToId && userId.toString() === assignedToId.toString();
+  const isCreator = userId && createdById && userId.toString() === createdById.toString();
+  const isTaskCompleted = taskStatus === 'completed';
+
+  // Permission flags
+  const canEdit = isAdmin || isAssignedToCurrentUser || isCreator;
+  const canUploadFiles = canEdit;
+  const canUpdateStatus = isAssignedToCurrentUser && !isTaskCompleted;
+  const canTrackTime = isAssignedToCurrentUser && !isTaskCompleted;
+  const canDelete = isAdmin || isCreator;
+  const canViewActivity = canEdit;
+  const canComment = canEdit;
+  const canAcceptTask = isAssignedToCurrentUser && !task?.isAccepted;
+  const canCompleteTask = isAssignedToCurrentUser && taskStatus !== 'completed';
 
   if (isLoading) {
     return (
@@ -277,19 +297,11 @@ const TaskDetail: React.FC = () => {
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Task Acceptance */}
-          {user && !task.isAccepted && (
+          {canAcceptTask && (
             <TaskAcceptance
               task={task}
-              currentUserId={user.id}
+              currentUserId={userId || ''}
               onTaskAccepted={handleTaskAccepted}
-            />
-          )}
-
-          {/* Task Progress Controls - Only for assigned team members */}
-          {user && task.assignedTo._id === user.id && (
-            <TaskProgressControls
-              task={task}
-              onTaskUpdated={handleTaskUpdated}
             />
           )}
 
@@ -382,145 +394,124 @@ const TaskDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Checklist */}
-          {task.checklist.length > 0 && (
+          {/* Enhanced Checklist */}
+          <EnhancedChecklist
+            taskId={task._id}
+            checklist={task.checklist}
+            onChecklistUpdate={handleChecklistUpdate}
+            canEdit={isAssignedToCurrentUser}
+            currentUserId={userId || ''}
+            currentUserName={user?.name || ''}
+          />
+
+          {/* File Attachments */}
+          <AttachmentUpload
+            taskId={task._id}
+            attachments={task.attachments}
+            onAttachmentUploaded={handleAttachmentUploaded}
+            onAttachmentDeleted={handleAttachmentDeleted}
+            canUpload={canUploadFiles}
+          />
+
+          {/* Comments */}
+          {canComment && (
             <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Checklist ({task.checklist.filter(item => item.completed).length}/{task.checklist.length})
+                Comments ({task.comments.length})
               </h2>
-              
-              <div className="space-y-3">
-                {task.checklist.map((item, index) => (
-                  <div key={item._id} className="flex items-center space-x-3">
-                    <button
-                      onClick={() => {
-                        const updatedChecklist = [...task.checklist];
-                        updatedChecklist[index] = {
-                          ...item,
-                          completed: !item.completed,
-                          completedBy: !item.completed ? { _id: user!.id, name: user!.name } : undefined,
-                          completedAt: !item.completed ? new Date().toISOString() : undefined
-                        };
-                        handleChecklistUpdate(updatedChecklist);
-                      }}
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                        item.completed
-                          ? 'bg-green-500 border-green-500 text-white'
-                          : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      {item.completed && <CheckSquare className="w-3 h-3" />}
-                    </button>
+
+              {/* Add Comment Form */}
+              <form onSubmit={handleAddComment} className="mb-6">
+                <div className="flex space-x-3">
+                  <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
+                    <span className="text-white font-medium text-xs">
+                      {user?.name?.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Add a comment... (Use @username to mention someone)"
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    />
+                    <div className="flex justify-end mt-2">
+                      <button
+                        type="submit"
+                        disabled={!newComment.trim() || isSubmittingComment}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
+                      >
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        {isSubmittingComment ? 'Adding...' : 'Add Comment'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+
+              {/* Comments List */}
+              <div className="space-y-4">
+                {task.comments.map((comment) => (
+                  <div key={comment._id} className="flex space-x-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full flex items-center justify-center">
+                      <span className="text-white font-medium text-xs">
+                        {comment.user.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
                     <div className="flex-1">
-                      <p className={`text-sm ${item.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                        {item.text}
-                      </p>
-                      {item.completed && item.completedBy && (
-                        <p className="text-xs text-gray-500">
-                          Completed by {item.completedBy.name} on {new Date(item.completedAt!).toLocaleDateString()}
-                        </p>
-                      )}
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900">
+                            {comment.user.name}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(comment.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700">{comment.text}</p>
+                        {comment.mentions.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {comment.mentions.map((mention) => (
+                              <span
+                                key={mention._id}
+                                className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
+                              >
+                                @{mention.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
-
-          {/* File Attachments */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              <Paperclip className="w-5 h-5 inline mr-2" />
-              Attachments
-            </h2>
-            
-            <FileUpload
-              taskId={task._id}
-              attachments={task.attachments}
-              onFileUploaded={handleFileUploaded}
-              onFileDeleted={handleFileDeleted}
-              canUpload={canUploadFiles || false}
-            />
-          </div>
-
-          {/* Comments */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">
-              Comments ({task.comments.length})
-            </h2>
-
-            {/* Add Comment Form */}
-            <form onSubmit={handleAddComment} className="mb-6">
-              <div className="flex space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
-                  <span className="text-white font-medium text-xs">
-                    {user?.name?.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <textarea
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Add a comment... (Use @username to mention someone)"
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  />
-                  <div className="flex justify-end mt-2">
-                    <button
-                      type="submit"
-                      disabled={!newComment.trim() || isSubmittingComment}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
-                    >
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      {isSubmittingComment ? 'Adding...' : 'Add Comment'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </form>
-
-            {/* Comments List */}
-            <div className="space-y-4">
-              {task.comments.map((comment) => (
-                <div key={comment._id} className="flex space-x-3">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full flex items-center justify-center">
-                    <span className="text-white font-medium text-xs">
-                      {comment.user.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-900">
-                          {comment.user.name}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(comment.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-700">{comment.text}</p>
-                      {comment.mentions.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {comment.mentions.map((mention) => (
-                            <span
-                              key={mention._id}
-                              className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
-                            >
-                              @{mention.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Time Tracker */}
+          {canTrackTime && (
+            <TimeTracker
+              taskId={task._id}
+              currentActualHours={task.actualHours}
+              estimatedHours={task.estimatedHours}
+              onTimeUpdate={handleTimeUpdate}
+              canTrack={canTrackTime}
+            />
+          )}
+
+          {/* Status Update - ONLY for assigned team members */}
+          <StatusUpdateDropdown
+            taskId={task._id}
+            currentStatus={task.status}
+            onStatusUpdate={handleStatusUpdate}
+            canUpdate={canUpdateStatus}
+          />
+
           {/* Task Info */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Task Information</h3>
@@ -539,6 +530,9 @@ const TaskDetail: React.FC = () => {
                 <div>
                   <span className="text-gray-600">Assigned to:</span>
                   <p className="font-medium">{task.assignedTo.name}</p>
+                  {isAssignedToCurrentUser && (
+                    <p className="text-xs text-green-600 mt-1">✓ You are assigned</p>
+                  )}
                 </div>
               </div>
 
@@ -547,6 +541,9 @@ const TaskDetail: React.FC = () => {
                 <div>
                   <span className="text-gray-600">Created by:</span>
                   <p className="font-medium">{task.createdBy.name}</p>
+                  {isCreator && (
+                    <p className="text-xs text-blue-600 mt-1">✓ You created this</p>
+                  )}
                 </div>
               </div>
 
@@ -567,6 +564,19 @@ const TaskDetail: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* Permission Status Display */}
+              <div className="pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Your Permissions</h4>
+                <div className="space-y-1 text-xs">
+                  {canUpdateStatus && <p className="text-green-600">✓ Can update status</p>}
+                  {canTrackTime && <p className="text-green-600">✓ Can track time</p>}
+                  {canUploadFiles && <p className="text-green-600">✓ Can upload files</p>}
+                  {canEdit && <p className="text-green-600">✓ Can edit task</p>}
+                  {canDelete && <p className="text-green-600">✓ Can delete task</p>}
+                  {isAdmin && <p className="text-purple-600">👑 Admin access</p>}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -582,10 +592,12 @@ const TaskDetail: React.FC = () => {
                   <Edit className="w-4 h-4 mr-2" />
                   Edit Task
                 </button>
-                <button className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <Paperclip className="w-4 h-4 mr-2" />
-                  Add Attachment
-                </button>
+                {canUploadFiles && (
+                  <button className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <Paperclip className="w-4 h-4 mr-2" />
+                    Add Attachment
+                  </button>
+                )}
               </div>
             </div>
           )}

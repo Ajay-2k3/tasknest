@@ -14,7 +14,7 @@ const taskSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['todo', 'in-progress', 'review', 'completed', 'blocked'],
+    enum: ['todo', 'in-progress', 'review', 'completed'],
     default: 'todo'
   },
   priority: {
@@ -105,7 +105,11 @@ const taskSchema = new mongoose.Schema({
   activityLog: [{
     action: {
       type: String,
-      enum: ['created', 'assigned', 'accepted', 'status_changed', 'updated', 'commented', 'time_logged'],
+      enum: [
+        'created', 'assigned', 'accepted', 'status_changed',
+        'updated', 'commented', 'time_updated', 'checklist_updated',
+        'file_uploaded', 'file_deleted'
+      ],
       required: true
     },
     user: {
@@ -120,9 +124,15 @@ const taskSchema = new mongoose.Schema({
     }
   }],
   checklist: [{
+    _id: {
+      type: String,
+      default: () => new mongoose.Types.ObjectId().toString()
+    },
     text: {
       type: String,
-      required: true
+      required: true,
+      trim: true,
+      maxlength: [200, 'Checklist item cannot exceed 200 characters']
     },
     completed: {
       type: Boolean,
@@ -132,7 +142,22 @@ const taskSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
-    completedAt: Date
+    completedAt: {
+      type: Date
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    },
+    order: {
+      type: Number,
+      default: 0
+    }
   }],
   isRecurring: {
     type: Boolean,
@@ -143,15 +168,42 @@ const taskSchema = new mongoose.Schema({
       type: String,
       enum: ['daily', 'weekly', 'monthly'],
     },
-    interval: Number, // every N days/weeks/months
+    interval: Number,
     endDate: Date
-  }
+  },
+  timeSessions: [{
+    startTime: {
+      type: Date,
+      required: true
+    },
+    endTime: {
+      type: Date,
+      required: true
+    },
+    duration: {
+      type: Number,
+      required: true
+    },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    description: {
+      type: String,
+      maxlength: [200, 'Session description cannot exceed 200 characters']
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 }, {
   timestamps: true
 });
 
-// Set completedAt when status changes to completed
-taskSchema.pre('save', function(next) {
+// Pre-save hook to set completedAt
+taskSchema.pre('save', function (next) {
   if (this.isModified('status')) {
     if (this.status === 'completed' && !this.completedAt) {
       this.completedAt = new Date();
@@ -162,19 +214,34 @@ taskSchema.pre('save', function(next) {
   next();
 });
 
-// Check if task is overdue
-taskSchema.virtual('isOverdue').get(function() {
-  return this.status !== 'completed' && new Date() > this.dueDate;
+// Virtuals
+taskSchema.virtual('isOverdue').get(function () {
+  return this.status !== 'completed' && this.dueDate && new Date() > this.dueDate;
 });
 
-// Calculate checklist progress
-taskSchema.virtual('checklistProgress').get(function() {
-  if (this.checklist.length === 0) return 0;
+taskSchema.virtual('checklistProgress').get(function () {
+  if (!Array.isArray(this.checklist) || this.checklist.length === 0) return 0;
   const completed = this.checklist.filter(item => item.completed).length;
   return Math.round((completed / this.checklist.length) * 100);
 });
 
-// Ensure virtual fields are serialized
+taskSchema.virtual('timeEfficiency').get(function () {
+  if (!this.actualHours || this.actualHours === 0) return 0;
+  return Math.round((this.estimatedHours / this.actualHours) * 100);
+});
+
+taskSchema.virtual('totalSessionTime').get(function () {
+  if (!Array.isArray(this.timeSessions)) return 0;
+  return this.timeSessions.reduce((total, session) => total + session.duration, 0);
+});
+
+// Enable virtuals in JSON output
 taskSchema.set('toJSON', { virtuals: true });
+
+// Indexes
+taskSchema.index({ assignedTo: 1, status: 1 });
+taskSchema.index({ project: 1, status: 1 });
+taskSchema.index({ dueDate: 1, status: 1 });
+taskSchema.index({ createdBy: 1, createdAt: -1 });
 
 export default mongoose.model('Task', taskSchema);

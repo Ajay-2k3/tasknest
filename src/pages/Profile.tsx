@@ -408,6 +408,7 @@ const Profile: React.FC = () => {
             </label>
             <input
               type="password"
+              autoComplete="current-password"
               value={passwordForm.currentPassword}
               onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -421,6 +422,7 @@ const Profile: React.FC = () => {
             </label>
             <input
               type="password"
+              autoComplete="new-password"
               value={passwordForm.newPassword}
               onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -435,6 +437,7 @@ const Profile: React.FC = () => {
             </label>
             <input
               type="password"
+              autoComplete="new-password"
               value={passwordForm.confirmPassword}
               onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -493,6 +496,7 @@ const Profile: React.FC = () => {
               </label>
               <input
                 type="password"
+                autoComplete="current-password"
                 value={deleteForm.password}
                 onChange={(e) => setDeleteForm({ password: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"

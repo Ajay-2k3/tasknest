@@ -12,7 +12,7 @@ const notificationSchema = new mongoose.Schema({
     enum: [
       'TASK_ASSIGNED', 'TASK_DUE_SOON', 'TASK_OVERDUE', 'TASK_COMPLETED',
       'PROJECT_DEADLINE', 'COMMENT_MENTION', 'TASK_ACCEPTED', 'TASK_REJECTED',
-      'USER_INVITED', 'ROLE_CHANGED'
+      'USER_INVITED', 'ROLE_CHANGED', 'EVENT_INVITATION', 'EVENT_UPDATED', 'EVENT_CANCELLED'
     ]
   },
   title: {

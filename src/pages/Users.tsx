@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
+import AddTenantModal from '../components/AddTenantModal';
 import Modal from '../components/ui/Modal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import axios from 'axios';
@@ -46,6 +47,7 @@ const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAddTenantModalOpen, setIsAddTenantModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -102,6 +104,10 @@ const Users: React.FC = () => {
     }
   };
 
+  const handleTenantAdded = (newUser: User) => {
+    setUsers(prev => [newUser, ...prev]);
+  };
+
   const getTaskStats = (tasks: User['assignedTasks']) => {
     const total = tasks.length;
     const completed = tasks.filter(task => task.status === 'completed').length;
@@ -140,13 +146,22 @@ const Users: React.FC = () => {
             Manage your team members and their access
           </p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Create User
-        </button>
+        <div className="mt-4 sm:mt-0 flex space-x-3">
+          <button 
+            onClick={() => setIsAddTenantModalOpen(true)}
+            className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add Team Member
+          </button>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all"
+          >
+            <UserPlus className="w-4 h-4 mr-2" />
+            Advanced Create
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -197,13 +212,22 @@ const Users: React.FC = () => {
               : 'Get started by creating your first team member.'
             }
           </p>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-all"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create User
-          </button>
+          <div className="flex space-x-3">
+            <button 
+              onClick={() => setIsAddTenantModalOpen(true)}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Team Member
+            </button>
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Advanced Create
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -467,6 +491,13 @@ const Users: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Add Team Member Modal */}
+      <AddTenantModal
+        isOpen={isAddTenantModalOpen}
+        onClose={() => setIsAddTenantModalOpen(false)}
+        onTenantAdded={handleTenantAdded}
+      />
     </div>
   );
 };

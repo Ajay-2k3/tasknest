@@ -54,7 +54,17 @@ const userSchema = new mongoose.Schema({
   createdProjects: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project'
-  }]
+  }],
+  contactNumber: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  roomNumber: {
+    type: String,
+    trim: true,
+    default: ''
+  }
 }, {
   timestamps: true
 });

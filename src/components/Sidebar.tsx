@@ -31,7 +31,10 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
     { name: 'Calendar', href: '/calendar', icon: Calendar },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Notifications', href: '/notifications', icon: Bell },
-    ...(user?.role === 'admin' ? [{ name: 'Team', href: '/admin/users', icon: Users }] : []),
+    ...(user?.role === 'admin' ? [
+      { name: 'Team', href: '/admin/users', icon: Users },
+      { name: 'Tenants', href: '/admin/tenants', icon: Users }
+    ] : []),
   ];
 
   const handleLogout = async () => {

@@ -37,10 +37,53 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true
-}));
+// Robust CORS configuration with flexible whitelist
+const defaultOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  process.env.CLIENT_URL,
+];
+
+// Allow comma-separated list via CORS_ORIGINS
+const envOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+const allowedOrigins = [...new Set([...defaultOrigins.filter(Boolean), ...envOrigins])];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser or same-origin requests with no origin header
+    if (!origin) return callback(null, true);
+
+    // Explicit allow if exact match
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    // Pattern allow for common hostings (Preview/Prod URLs)
+    try {
+      const hostname = new URL(origin).hostname;
+      const patternAllowed = (
+        hostname.endsWith('.vercel.app') ||
+        hostname.endsWith('.netlify.app') ||
+        hostname.endsWith('.onrender.com') ||
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1'
+      );
+      if (patternAllowed) return callback(null, true);
+    } catch (_) {}
+
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
+  },
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Length', 'Content-Type']
+};
+
+// Preflight and CORS
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));

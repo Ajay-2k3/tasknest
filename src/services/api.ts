@@ -37,7 +37,8 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
-          const response = await axios.post('/auth/refresh', { refreshToken });
+          // Use the same configured API client to respect baseURL and headers
+          const response = await api.post('/auth/refresh', { refreshToken });
           const { accessToken } = response.data;
           localStorage.setItem('accessToken', accessToken);
           
@@ -45,7 +46,8 @@ api.interceptors.response.use(
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
         }
-      } catch (refreshError) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  } catch (_err) {
         // Refresh failed, redirect to login
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');

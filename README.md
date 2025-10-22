@@ -355,7 +355,21 @@ NODE_ENV=production
 MONGO_URI=your-production-mongodb-uri
 JWT_SECRET=your-production-jwt-secret
 CLIENT_URL=your-frontend-domain
+# Optionally allow multiple origins (comma-separated)
+CORS_ORIGINS=https://your-frontend.vercel.app,https://*.vercel.app
 ```
+
+### CORS in Production
+The backend now ships with a flexible CORS whitelist that:
+- Reads `CLIENT_URL` and `CORS_ORIGINS` (comma-separated)
+- Also allows common preview domains like `*.vercel.app`, `*.netlify.app`, `*.onrender.com`
+
+To fix login calls blocked by CORS after deploying the frontend on Vercel:
+1. Set `CLIENT_URL` in the backend environment to your exact frontend URL, e.g. `https://tasknest-delta.vercel.app`
+2. Optionally set `CORS_ORIGINS` with any additional domains (preview URLs etc.)
+3. In the frontend, set `VITE_API_URL` to your backend API base, including `/api` (example: `https://your-backend.example.com/api`).
+4. Redeploy both backend and frontend.
+
 
 ## 🤝 Contributing
 

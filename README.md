@@ -330,6 +330,20 @@ localStorage.clear()
 2. Deploy the `dist` folder
 3. Set environment variables for API URL
 
+#### Fix 404 on refresh (Vercel SPA routing)
+If you see a 404 page when refreshing a client route like `/login` on Vercel, make sure the project includes a SPA fallback. This repo ships with `vercel.json` that:
+
+```
+{
+   "routes": [
+      { "handle": "filesystem" },
+      { "src": "/.*", "dest": "/index.html" }
+   ]
+}
+```
+
+This tells Vercel to serve `index.html` for any non-file route so React Router can handle it. After adding/updating this file, trigger a redeploy.
+
 ### Backend (Railway/Heroku)
 1. Set environment variables
 2. Ensure MongoDB connection
